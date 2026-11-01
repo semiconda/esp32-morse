@@ -140,5 +140,3 @@ Windows: `winget install BrechtSanders.WinLibs.POSIX.UCRT`, then open a new
 terminal. (If the build compiles but the link fails with *cannot find -lmsvcrt*,
 the install was left incomplete; reinstalling it fixes that.) On macOS:
 `xcode-select --install`. On Linux: your distribution's `g++`.
-
-Built for *Basic Skills for Experimentalists* (TIGP 2026), Project 2.
