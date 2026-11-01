@@ -70,8 +70,8 @@ What the app does:
   Send stays disabled until it is gone. Leading and trailing spaces are dropped and
   runs of spaces become one; tabs, line breaks and non-breaking spaces count as
   unsupported characters. Up to 255 characters.
-- **Send** transmits once. **Resend** repeats the board's last message (shown on
-  the button) at the current speed. **Stop** ends it within one element.
+- **Send** transmits once. The message stays in the box, so pressing Send again
+  repeats it, at whatever speed is set by then. **Stop** ends it within one element.
 - **The live display** shows the message with the current word, the current
   character, and its dots and dashes with the one being sent lit. At high speed
   it lags the LED slightly — the WiFi link and the browser take tens of
@@ -122,8 +122,8 @@ From a phone or computer browser that has a developer console, the app offers th
 same thing: `morse.raw({cmd:'send', text:'HELLO', wpm:0})` sends any object and
 logs the board's reply.
 
-The other commands are `check` (`text`), `resend` (`wpm`), and `led`
-(`r`, `g`, `b` 0–255, `brightness` 0–100).
+The other commands are `check` (`text`) and `led` (`r`, `g`, `b` 0–255,
+`brightness` 0–100).
 
 ## Tests
 

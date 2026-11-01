@@ -153,8 +153,6 @@
   .primary { background: var(--accent); border-color: var(--accent); color: #04121a; font-weight: 600; }
   .stopb { background: #7f1d1d; border-color: #b91c1c; color: #fee2e2; font-weight: 600; }
   .primary:disabled, .stopb:disabled { background: #20262c; border-color: var(--line); color: var(--dim); }
-  .wide { width: 100%; margin-top: 8px; text-align: left; white-space: nowrap; overflow: hidden;
-    text-overflow: ellipsis; }
   #sendErr { margin-top: 8px; }
 
   /* The live display. No transitions anywhere here: an animation
@@ -235,7 +233,6 @@
     <button class="primary" id="send" disabled>Send</button>
     <button class="stopb" id="stop" disabled>Stop</button>
   </div>
-  <button class="wide" id="resend" disabled>Resend (nothing sent yet)</button>
   <p class="err small" id="sendErr" aria-live="polite"></p>
 </div>
 
@@ -609,7 +606,7 @@
 
   const msgEl = $('msg'), countEl = $('count'), pvBox = $('pvBox'), pv = $('pv'),
         checkErr = $('checkErr'), durEl = $('dur'), pvNote = $('pvNote'), wpmEl = $('wpm'),
-        wpmOut = $('wpmOut'), sendBtn = $('send'), stopBtn = $('stop'), resendBtn = $('resend'),
+        wpmOut = $('wpmOut'), sendBtn = $('send'), stopBtn = $('stop'),
         sendErr = $('sendErr'), pill = $('pill');
 
   const KEY_WPM = 'esp32-morse.wpm';
@@ -622,7 +619,6 @@
   let checkLost = false;      // the last check got no reply
   let sendBad = null;        // `bad` from a refused send, shown until the text changes
   let sendPending = false;
-  let resendPending = false;
   let stopPending = false;
 
   const wpm = () => +wpmEl.value;
@@ -754,11 +750,6 @@
   wpmEl.addEventListener('input', render);
   wpmEl.addEventListener('change', () => save(KEY_WPM, wpm()));
 
-  function truncate(s, n) {
-    const cps = chars(s);
-    return cps.length > n ? cps.slice(0, n - 1).join('') + '…' : cps.join('');
-  }
-
   function refused(reply) {
     if (!reply) return connected ? 'The board did not answer.' : 'Not connected.';
     return 'The board refused it: ' + (reply.error || 'no reason given') + '.';
@@ -787,20 +778,6 @@
           buildPreview();
         }
       }
-      render();
-    });
-  });
-
-  // Resend means the board's last accepted message, at the speed the slider shows now
-  //. The button carries that text so it is never a surprise.
-  resendBtn.addEventListener('click', () => {
-    if (resendBtn.disabled) return;
-    resendPending = true;
-    sendErr.textContent = '';
-    render();
-    request({ cmd: 'resend', wpm: wpm() }).then((reply) => {
-      resendPending = false;
-      if (!reply || !reply.ok) sendErr.textContent = refused(reply);
       render();
     });
   });
@@ -857,11 +834,6 @@
     const busy = sending();
     sendBtn.disabled = !connected || !board || busy || sendPending ||
                        msgEl.value === '' || !isFresh || !r.ok;
-    const m = board && board.message;
-    resendBtn.disabled = !connected || !board || !m || busy || resendPending;
-    resendBtn.textContent = m
-      ? `Resend “${truncate(m.text || m.norm || '', 28)}”`
-      : 'Resend (nothing sent yet)';
     stopBtn.disabled = !connected || !busy || stopPending;
   }
 
@@ -894,7 +866,7 @@
     if (!m || typeof m.norm !== 'string') { disp = null; liveMsg.textContent = ''; return; }
     const morse = Array.isArray(m.morse) ? m.morse : [];
     const key = m.norm + '\u0000' + morse.join(' ');
-    if (disp && disp.key === key) return;   // a resend of the same message keeps its spans
+    if (disp && disp.key === key) return;   // the same message sent again keeps its spans
 
     const cps = chars(m.norm);
     const wordEls = [];

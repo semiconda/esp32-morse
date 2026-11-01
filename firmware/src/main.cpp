@@ -81,8 +81,8 @@ static const uint32_t kSerialClient = 0;
 static String serialLine;
 static bool serialOverflow = false;
 
-// The message in flight while sending, and the last accepted one while idle — the one
-// Resend repeats (SPEC.md section 4). Replaced only when a send is accepted, which cannot
+// The message in flight while sending, and the last accepted one while idle, as `state`
+// reports it (SPEC.md section 6.3). Replaced only when a send is accepted, which cannot
 // happen while one is running, so the transmitter's pointer into `steps` stays valid for as
 // long as it is used.
 struct Message {
@@ -153,8 +153,8 @@ static void broadcastElem(const tx::Event& ev) {
 // after the phone slept — resynchronises without having to ask for anything.
 //
 // It carries the message's `morse`, not just its text: a phone that joins mid-transmission,
-// or did not type the message, otherwise cannot render the third level of the live display,
-// and a phone that reconnects cannot label its Resend control (SPEC.md section 6.3).
+// or did not type the message, otherwise cannot render the third level of the live display
+// (SPEC.md section 6.3).
 static void fillMorse(JsonArray out, const morse::Checked& c) {
   for (const std::string& code : c.morse) out.add(code.c_str());
 }
@@ -263,7 +263,7 @@ static void cmdCheck(JsonDocument& req, JsonDocument& res) {
   res["length"] = c.length;
 }
 
-// Accepting a transmission, for send and resend alike. In this order (SPEC.md section 9.1):
+// Accepting a transmission. In this order (SPEC.md section 9.1):
 // cancel the preview, force black, give the LED to the transmitter — then start it.
 static void startTransmission(uint16_t wpm) {
   lastMessage->wpm = wpm;
@@ -304,19 +304,9 @@ static void cmdSend(JsonDocument& req, JsonDocument& res) {
   res["ok"] = true;
 }
 
-// Resend repeats the board's last accepted message, not the text box, at the speed given
-// now. It carries only a speed, so it means the same thing on every phone (section 4).
-static void cmdResend(JsonDocument& req, JsonDocument& res) {
-  if (tx::running()) return fail(res, "busy");
-  if (!lastMessage) return fail(res, "nothing sent yet");
-  uint16_t wpm;
-  if (const char* err = request::wpm(req["wpm"], wpm)) return fail(res, err);
-  startTransmission(wpm);
-  res["ok"] = true;
-}
-
 // Always succeeds. `state: idle` follows only once the transmitter has acknowledged, never on
-// receipt of this — otherwise a quick Resend would be rejected as busy (section 6.3).
+// receipt of this — otherwise pressing Send again straight away would be rejected as busy
+// (section 6.3).
 static void cmdStop(JsonDocument& /*req*/, JsonDocument& res) {
   tx::requestStop();
   res["ok"] = true;
@@ -343,8 +333,6 @@ static void handleRequest(uint32_t clientId, const String& text) {
     cmdCheck(req, res);
   } else if (strcmp(cmd, "send") == 0) {
     cmdSend(req, res);
-  } else if (strcmp(cmd, "resend") == 0) {
-    cmdResend(req, res);
   } else if (strcmp(cmd, "stop") == 0) {
     cmdStop(req, res);
   } else if (strcmp(cmd, "led") == 0) {
