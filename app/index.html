@@ -11,8 +11,6 @@
 
   The app holds no Morse table (SPEC.md section 5). It sends the text as typed and renders
   what the board answers: the normalised message, the codes, the unsupported positions.
-  T4 scope: the LED panel, and sending: message, speed, Send, Resend, Stop. The live display
-  arrives in T5.
 -->
 <html lang="en">
 <head>
@@ -159,6 +157,28 @@
     text-overflow: ellipsis; }
   #sendErr { margin-top: 8px; }
 
+  /* The live display (SPEC.md section 4.1). No transitions anywhere here: an animation
+     would add its own delay on top of the link's, and at 40 WPM an element is only 30 ms. */
+  .live.stale { opacity: .45; }
+  .live-msg { font-family: var(--mono); font-size: .95rem; line-height: 1.8;
+    word-break: break-word; max-height: 30vh; overflow-y: auto; }
+  .live-msg .w.cur { background: #38bdf826; border-radius: 4px; box-shadow: 0 0 0 2px #38bdf826; }
+  .live-msg .c.cc { background: var(--accent); color: #04121a; border-radius: 3px; }
+  .live-row { display: flex; align-items: center; gap: 14px; margin: 12px 0 10px; min-height: 64px; }
+  .big { font: 600 3.2rem/1 var(--mono); min-width: 1.3em; text-align: center; }
+  .els { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1 1 auto; }
+  .el { height: 14px; border-radius: 7px; background: #2b3238; }
+  .el.dit { width: 14px; }
+  .el.dah { width: 44px; }
+  .el.on { background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  .ledind { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; background: #1d2328;
+    border: 1px solid var(--line); }
+  .ledind.on { background: var(--ledc, var(--ok)); box-shadow: 0 0 16px var(--ledc, var(--ok)); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 8px; }
+  .stat { background: var(--well); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .stat .k { font-size: .72rem; color: var(--dim); }
+  .stat .v { font: 600 1.3rem/1.3 var(--mono); font-variant-numeric: tabular-nums; }
+
   footer { color: var(--dim); font-size: .78rem; margin-top: 20px; text-align: center; }
 </style>
 </head>
@@ -174,6 +194,25 @@
     <div class="status-sub" id="statusSub">Opening the link to the board</div>
   </div>
   <div class="pill" id="pill" hidden>Idle</div>
+</div>
+
+<div class="panel live" id="live" hidden>
+  <h2>On the LED</h2>
+  <div class="live-msg" id="liveMsg"></div>
+  <div class="live-row" id="liveRow">
+    <div class="big" id="bigChar"></div>
+    <div class="els" id="els"></div>
+    <div class="ledind" id="ledInd" title="The LED: lit during a dot or a dash"></div>
+  </div>
+  <p class="small muted" id="liveNote"></p>
+  <p class="small note" id="liveFast" hidden>At this speed the display lags the LED by the WiFi
+     link and the browser, so it shows progress, not exact sync.</p>
+  <div class="stats" id="result" hidden>
+    <div class="stat"><div class="k">The board timed it at</div><div class="v" id="rBoard"></div></div>
+    <div class="stat"><div class="k">Predicted</div><div class="v" id="rPred"></div>
+      <div class="small muted" id="rPredSub"></div></div>
+  </div>
+  <p class="small muted" id="liveLost"></p>
 </div>
 
 <div class="panel">
@@ -384,13 +423,17 @@
 
   function onBroadcast(msg) {
     if (msg.type === 'state') onState(msg);
+    else if (msg.type === 'elem') onElem(msg);
+    else if (msg.type === 'done') onDone(msg);
   }
 
   function onState(s) {
+    const wasSending = sending();
     const linkWasNew = freshLink;
     board = s;
     freshLink = false;
     stopPending = false;
+    onStateLive(s, wasSending, linkWasNew);
     applyBoardLed();
     render();
     // A reconnect may have missed replies; ask again about whatever is in the box now.
@@ -413,6 +456,7 @@
     renderStatus();
     renderLed();
     renderMessage();
+    renderLive();
   }
 
   // ---- The LED panel (SPEC.md section 9) ----
@@ -827,6 +871,181 @@
   const seededWpm = load(KEY_WPM);
   if (Number.isInteger(seededWpm) && seededWpm >= 5 && seededWpm <= 40) {
     wpmEl.value = String(seededWpm);
+  }
+
+  // ---- The live display (SPEC.md section 4.1), driven by `elem` from the board ----
+
+  const live = $('live'), liveMsg = $('liveMsg'), bigChar = $('bigChar'), elsEl = $('els'),
+        liveRow = $('liveRow'), ledInd = $('ledInd'), liveNote = $('liveNote'), liveFast = $('liveFast'),
+        result = $('result'), rBoard = $('rBoard'), rPred = $('rPred'), rPredSub = $('rPredSub'),
+        liveLost = $('liveLost');
+
+  // The message on display: its spans are built once per message, and each `elem` only
+  // moves a few classes. An `elem` can arrive every ~30 ms at 40 WPM.
+  let disp = null;            // { key, cps, morse, wordEls, charEls }
+  let curW = -1;
+  let curC = -1;
+  let elSpans = [];
+  let litEl = null;
+  let latest = null;          // the newest `elem` not yet painted
+  let frameQueued = false;
+  // The run being watched: its speed and units are fixed when it starts, because `state`
+  // after it ends may already describe something else.
+  let run = null;             // { wpm, units, norm, done, ended, endedAt, unseen }
+
+  function showMessage(m) {
+    if (!m || typeof m.norm !== 'string') { disp = null; liveMsg.textContent = ''; return; }
+    const morse = Array.isArray(m.morse) ? m.morse : [];
+    const key = m.norm + '\u0000' + morse.join(' ');
+    if (disp && disp.key === key) return;   // a resend of the same message keeps its spans
+
+    const cps = chars(m.norm);
+    const wordEls = [];
+    const charEls = [];
+    const frag = document.createDocumentFragment();
+    let word = null;
+    cps.forEach((ch) => {
+      if (ch === ' ') {
+        word = null;
+        charEls.push(frag.appendChild(span('', ' ')));
+        return;
+      }
+      if (!word) wordEls.push(word = frag.appendChild(span('w', '')));
+      charEls.push(word.appendChild(span('c', ch)));
+    });
+    liveMsg.textContent = '';
+    liveMsg.appendChild(frag);
+    disp = { key, cps, morse, wordEls, charEls };
+    curW = curC = -1;
+    elSpans = [];
+    litEl = null;
+  }
+
+  function clearMarks() {
+    latest = null;
+    if (disp && disp.wordEls[curW]) disp.wordEls[curW].classList.remove('cur');
+    if (disp && disp.charEls[curC]) disp.charEls[curC].classList.remove('cc');
+    curW = curC = -1;
+    bigChar.textContent = '';
+    elsEl.textContent = '';
+    elSpans = [];
+    litEl = null;
+    ledInd.classList.remove('on');
+  }
+
+  function onStateLive(s, wasSending, linkWasNew) {
+    showMessage(s.message);
+    const nowSending = s.state === 'sending';
+    if (nowSending && (!wasSending || linkWasNew)) {
+      // Started, or joined mid-run: the next `elem` is where the display picks up.
+      run = { wpm: s.wpm, units: s.message && s.message.units,
+              norm: s.message && s.message.norm, done: null, ended: false };
+      clearMarks();
+    } else if (!nowSending && (wasSending || linkWasNew)) {
+      clearMarks();
+      // `state` names no run, so a phone that was away cannot tell its own finished run from
+      // one another phone sent and finished meanwhile. A run that had already ended before
+      // the link dropped is therefore forgotten rather than shown under a message it may not
+      // belong to; so is one in flight then if the board now names another message or speed.
+      if (linkWasNew && run &&
+          (run.ended || run.wpm !== s.wpm || run.norm !== (s.message && s.message.norm))) {
+        run = null;
+      }
+      if (run && !run.ended) {
+        run.ended = true;
+        run.endedAt = Date.now();
+        run.unseen = linkWasNew;   // it ended while this phone was away
+        // `done` may follow this `state` rather than precede it; wait before calling the
+        // run stopped.
+        setTimeout(render, 1200);
+      }
+    }
+    const l = s.led;
+    if (validLed(l)) {
+      ledInd.style.setProperty('--ledc', (l.r || l.g || l.b) ? `rgb(${l.r}, ${l.g}, ${l.b})` : '#888');
+    }
+  }
+
+  function onElem(ev) {
+    latest = ev;
+    if (!frameQueued) { frameQueued = true; requestAnimationFrame(paint); }
+  }
+
+  // Each `elem` fully describes the display, so only the newest one in a frame needs
+  // painting. Gaps keep the character (SPEC.md section 6.3): `gap_char` and `gap_word`
+  // carry the character that has just finished, and it stays until the next dot or dash.
+  function paint() {
+    frameQueued = false;
+    const ev = latest;
+    latest = null;
+    if (!ev || !disp || !sending()) return;
+    const c = ev.c;
+    const w = ev.w;
+    if (!Number.isInteger(c) || c < 0 || c >= disp.cps.length) return;
+
+    if (w !== curW) {
+      if (disp.wordEls[curW]) disp.wordEls[curW].classList.remove('cur');
+      if (disp.wordEls[w]) disp.wordEls[w].classList.add('cur');
+      curW = w;
+    }
+    if (c !== curC) {
+      if (disp.charEls[curC]) disp.charEls[curC].classList.remove('cc');
+      if (disp.charEls[c]) disp.charEls[c].classList.add('cc');
+      curC = c;
+      bigChar.textContent = disp.cps[c];
+      elsEl.textContent = '';
+      elSpans = Array.from(disp.morse[c] || '')
+        .map((e) => elsEl.appendChild(span(e === '-' ? 'el dah' : 'el dit', '')));
+      litEl = null;
+    }
+    const mark = ev.kind === 'dot' || ev.kind === 'dash';
+    if (litEl) litEl.classList.remove('on');
+    litEl = mark ? elSpans[ev.e] || null : null;
+    if (litEl) litEl.classList.add('on');
+    ledInd.classList.toggle('on', mark);
+  }
+
+  function onDone(d) {
+    if (!run) {
+      run = { wpm: board && board.wpm,
+              units: board && board.message && board.message.units, ended: true };
+    }
+    run.done = d;
+    render();
+  }
+
+  function renderLive() {
+    live.hidden = !disp;
+    if (!disp) return;
+    live.classList.toggle('stale', !connected);
+    const busy = sending();
+    const w = run ? run.wpm : board && board.wpm;
+    const units = run ? run.units : null;
+    const predicted = Number.isInteger(w) && w > 0 && units > 0
+      ? seconds(units, w, 3) : null;
+
+    liveRow.hidden = !busy;
+    liveFast.hidden = !(busy && w >= 25);
+
+    let note;
+    if (!connected) note = 'Not connected: this is the last thing the board said.';
+    else if (busy) note = `Sending at ${w} WPM` + (predicted ? ` · predicted ${predicted} s` : '') + '.';
+    else if (run && run.done) note = 'Completed.';
+    else if (run && run.ended && run.unseen) note = 'It ended while this phone was away.';
+    else if (run && run.ended && Date.now() - run.endedAt >= 1000) {
+      note = 'Stopped before the end, so it was not timed.';
+    } else note = 'Idle. This is the last message sent.';
+    liveNote.textContent = note;
+
+    const d = run && !busy ? run.done : null;
+    result.hidden = !d;
+    if (d) {
+      rBoard.textContent = (d.elapsed_ms / 1000).toFixed(3) + ' s';
+      rPred.textContent = predicted ? predicted + ' s' : '?';
+      rPredSub.textContent = predicted ? `${units} units at ${w} WPM` : '';
+    }
+    const lost = d ? d.dropped : board && board.dropped;
+    liveLost.textContent = typeof lost === 'number' ? `Events lost: ${lost}` : '';
   }
 
   window.morse = { raw };
