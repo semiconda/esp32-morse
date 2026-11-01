@@ -3,6 +3,9 @@
 firmware/include/secrets.h
 __pycache__/
 
+# Generated from app/index.html by firmware/scripts/embed_app.py at every build.
+firmware/include/app_html.h
+
 # Working documents for Claude - local only, never pushed
 VISION.md
 SPEC.md
