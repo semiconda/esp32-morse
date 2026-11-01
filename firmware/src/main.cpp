@@ -129,6 +129,26 @@ static void broadcastCritical(JsonDocument& doc) {
   for (uint32_t id : clients) sendOrClose(id, buf);
 }
 
+// `elem` frames refused by a phone whose send queue was full — the per-client drop policy,
+// not the transmitter's ring. Reported in the [status] line so a slow phone is visible.
+static uint32_t elemRefused = 0;
+
+// `elem` is a live view of something already happening: a stale one is worthless and a
+// backlog of them is worse than nothing. So it is dropped for a phone that cannot take it,
+// and only for that phone. Built with snprintf rather than a JsonDocument because at 40 WPM
+// there are ~19 of these a second.
+static void broadcastElem(const tx::Event& ev) {
+  if (clients.empty()) return;
+  char json[96];
+  const int n = snprintf(json, sizeof json,
+                         "{\"type\":\"elem\",\"w\":%u,\"c\":%u,\"e\":%d,\"kind\":\"%s\"}", ev.w,
+                         ev.c, ev.e, morse::kindName(ev.kind));
+  auto buf = std::make_shared<std::vector<uint8_t>>(json, json + n);
+  for (uint32_t id : clients) {
+    if (!ws.text(id, buf)) ++elemRefused;
+  }
+}
+
 // Every connection begins with this, so an app that has just connected — or reconnected
 // after the phone slept — resynchronises without having to ask for anything.
 //
@@ -495,13 +515,19 @@ static void pollTransmitter() {
   tx::Event ev;
   while (tx::pop(ev)) {
     ++eventsThisRun;
-    // T5 broadcasts these as `elem`. Until then they are drained and counted, so the ring
-    // never fills.
+    broadcastElem(ev);
   }
 
   if (end == tx::End::Done) {
     Serial.printf("[done] elapsed_ms=%u dropped=%u events=%u/%u\n", elapsedMs,
                   tx::dropped(), eventsThisRun, (unsigned)lastMessage->steps.size());
+    // `done` only ever describes a transmission that ran to completion: its elapsed_ms is
+    // compared against a prediction, and a truncated one next to a prediction is a trap.
+    JsonDocument doc;
+    doc["type"] = "done";
+    doc["elapsed_ms"] = elapsedMs;
+    doc["dropped"] = tx::dropped();
+    broadcastCritical(doc);
     broadcastState();
   } else if (end == tx::End::Stopped) {
     Serial.printf("[tx] stopped after %u of %u events\n", eventsThisRun,
@@ -553,10 +579,12 @@ void loop() {
   // is often enough to answer "is the access point actually up?" without being noise.
   if (now - lastHeartbeatMs >= kHeartbeatMs) {
     lastHeartbeatMs = now;
-    Serial.printf("[status] up %lus  AP \"%s\" on %s  stations=%u  ws=%u  tx=%s  heap=%u\n",
+    Serial.printf("[status] up %lus  AP \"%s\" on %s  stations=%u  ws=%u  tx=%s  "
+                  "elem_refused=%u  heap=%u\n",
                   (unsigned long)(now / 1000), kApSsid,
                   WiFi.softAPIP().toString().c_str(),
                   WiFi.softAPgetStationNum(), (unsigned)clients.size(),
-                  tx::running() ? "sending" : "idle", (unsigned)ESP.getFreeHeap());
+                  tx::running() ? "sending" : "idle", elemRefused,
+                  (unsigned)ESP.getFreeHeap());
   }
 }
