@@ -11,7 +11,8 @@
 
   The app holds no Morse table (SPEC.md section 5). It sends the text as typed and renders
   what the board answers: the normalised message, the codes, the unsupported positions.
-  T3 scope: connect, and the LED panel. Sending arrives in T4, the live display in T5.
+  T4 scope: the LED panel, and sending: message, speed, Send, Resend, Stop. The live display
+  arrives in T5.
 -->
 <html lang="en">
 <head>
@@ -74,6 +75,10 @@
   .dot.bad  { background: var(--bad); }
   .status-text { font-size: .92rem; }
   .status-sub  { color: var(--dim); font-size: .8rem; }
+  .pill { margin-left: auto; flex: 0 0 auto; font-size: .72rem; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--dim); }
+  .pill.on { background: var(--accent); border-color: var(--accent); color: #04121a; }
 
   .panel {
     background: var(--panel);
@@ -121,6 +126,39 @@
   .advice.ok   { color: var(--ok); }
   #preset { margin: 4px 0 6px; }
 
+  /* The message, its preview and the controls (SPEC.md sections 3, 4). */
+  /* 16px or more, or iOS Safari zooms the page when the box takes focus. */
+  textarea { width: 100%; font: 16px/1.4 var(--mono); background: var(--well); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px; resize: vertical; }
+  .row { display: flex; justify-content: space-between; gap: 10px; margin: 4px 0 10px; }
+  .count { font-variant-numeric: tabular-nums; color: var(--dim); }
+  .count.over { color: var(--bad); }
+  /* Counted as typed, before the board has normalised it: an estimate, so it is not red. */
+  .count.unchecked { opacity: .6; font-style: italic; }
+  .pvbox { background: var(--well); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px; margin-bottom: 6px; transition: opacity .15s; }
+  .pvbox.stale { opacity: .4; filter: grayscale(1); }
+  .pv { display: flex; flex-wrap: wrap; gap: 6px 1px; font-family: var(--mono); max-height: 45vh;
+    overflow-y: auto; }
+  .pv.empty { font-family: inherit; font-size: .85rem; color: var(--dim); }
+  .pvbox p { margin: 8px 0 0 !important; }
+  .pw { display: flex; flex-wrap: wrap; gap: 6px 1px; max-width: 100%; }
+  .pc { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto;
+    min-width: 1.25em; padding: 1px 3px; border-radius: 5px; }
+  .pc.sp { min-width: .8em; }
+  .pc .ch { font-size: 1.05rem; line-height: 1.25; white-space: pre; }
+  .pc .ch.sym { font-size: .68rem; line-height: 1.85; }
+  .pc .mo { font-size: .66rem; line-height: 1.1; color: var(--dim); min-height: 1.1em; }
+  .pc.bad { background: #f8717126; box-shadow: inset 0 0 0 1px var(--bad); }
+  .pc.bad .ch { color: var(--bad); }
+  .btns { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 4px; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #04121a; font-weight: 600; }
+  .stopb { background: #7f1d1d; border-color: #b91c1c; color: #fee2e2; font-weight: 600; }
+  .primary:disabled, .stopb:disabled { background: #20262c; border-color: var(--line); color: var(--dim); }
+  .wide { width: 100%; margin-top: 8px; text-align: left; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+  #sendErr { margin-top: 8px; }
+
   footer { color: var(--dim); font-size: .78rem; margin-top: 20px; text-align: center; }
 </style>
 </head>
@@ -135,6 +173,32 @@
     <div class="status-text" id="statusText">Connecting…</div>
     <div class="status-sub" id="statusSub">Opening the link to the board</div>
   </div>
+  <div class="pill" id="pill" hidden>Idle</div>
+</div>
+
+<div class="panel">
+  <h2>Message</h2>
+  <textarea id="msg" rows="3" placeholder="PARIS PARIS" autocomplete="off" autocorrect="off"
+            autocapitalize="characters" spellcheck="false" aria-label="Message"></textarea>
+  <div class="row small"><span class="muted">Checked by the board as you type.</span>
+    <span class="count" id="count">0 / 255</span></div>
+  <div class="pvbox" id="pvBox">
+    <div class="pv empty" id="pv">The board's reading of your message appears here.</div>
+    <p class="err small" id="checkErr" aria-live="polite"></p>
+    <p class="small muted" id="dur"></p>
+  </div>
+  <p class="small muted" id="pvNote"></p>
+
+  <label class="lbl" for="wpm">Speed <span id="wpmOut">20 WPM · dot 60 ms</span></label>
+  <input type="range" id="wpm" min="5" max="40" step="1" value="20">
+  <p class="small muted">Applies to the next send, never to one already running.</p>
+
+  <div class="btns">
+    <button class="primary" id="send" disabled>Send</button>
+    <button class="stopb" id="stop" disabled>Stop</button>
+  </div>
+  <button class="wide" id="resend" disabled>Resend (nothing sent yet)</button>
+  <p class="err small" id="sendErr" aria-live="polite"></p>
 </div>
 
 <div class="panel">
@@ -283,9 +347,22 @@
     });
   }
 
+  // The board drops a frame over this many bytes without a reply (SPEC.md section 6.3), so
+  // sending one would only look, 3 s later, like a board that has stopped answering.
+  const MAX_FRAME_BYTES = 4096;
+
   function request(obj) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.resolve(null);
-    return post(Object.assign({}, obj, { id: 'a' + (nextId++) }));
+    const msg = Object.assign({}, obj, { id: 'a' + (nextId++) });
+    // Only text can make a frame that big, and text that big is far over the length limit
+    // as typed, so the honest answer is the board's own "too long" — given here, because
+    // the board will never get to say it. `length` is counted as typed: the board's count
+    // after normalisation cannot be had without sending the frame.
+    if (new TextEncoder().encode(JSON.stringify(msg)).length > MAX_FRAME_BYTES) {
+      return Promise.resolve({ id: msg.id, ok: false, error: 'message too long', oversized: true,
+                               length: Array.from(String(obj.text || '')).length });
+    }
+    return post(msg);
   }
 
   // Puts an arbitrary object on the socket, with an id injected so the reply can be matched
@@ -310,13 +387,20 @@
   }
 
   function onState(s) {
+    const linkWasNew = freshLink;
     board = s;
     freshLink = false;
+    stopPending = false;
     applyBoardLed();
     render();
+    // A reconnect may have missed replies; ask again about whatever is in the box now.
+    if (linkWasNew && msgEl.value !== '') runCheck();
   }
 
   function renderStatus() {
+    pill.hidden = !(connected && board);
+    pill.textContent = sending() ? 'Sending' : 'Idle';
+    pill.classList.toggle('on', sending());
     if (!connected) return;   // connect() and scheduleReconnect() say what the link is doing
     if (!board) { setStatus('ok', 'Connected', 'Waiting for the board to say hello'); return; }
     const n = board.clients;
@@ -328,6 +412,7 @@
   function render() {
     renderStatus();
     renderLed();
+    renderMessage();
   }
 
   // ---- The LED panel (SPEC.md section 9) ----
@@ -478,6 +563,271 @@
 
   const seeded = load(KEY_LED);
   setLedControls(validLed(seeded) ? seeded : FILMING);
+
+  // ---- The message, the preview and the controls (SPEC.md sections 3, 4, 6.3) ----
+
+  const msgEl = $('msg'), countEl = $('count'), pvBox = $('pvBox'), pv = $('pv'),
+        checkErr = $('checkErr'), durEl = $('dur'), pvNote = $('pvNote'), wpmEl = $('wpm'),
+        wpmOut = $('wpmOut'), sendBtn = $('send'), stopBtn = $('stop'), resendBtn = $('resend'),
+        sendErr = $('sendErr'), pill = $('pill');
+
+  const KEY_WPM = 'esp32-morse.wpm';
+  const MAX_CHARS = 255;      // after normalisation, in code points (SPEC.md section 3.1)
+  const CHECK_AFTER_MS = 250; // typing pause before asking the board
+
+  let check = null;           // { text, reply }: the last `check` answer and the text it was for
+  let checkSeq = 0;
+  let checkTimer = null;
+  let checkLost = false;      // the last check got no reply
+  let sendBad = null;        // `bad` from a refused send, shown until the text changes
+  let sendPending = false;
+  let resendPending = false;
+  let stopPending = false;
+
+  const wpm = () => +wpmEl.value;
+  const fresh = () => !!check && check.text === msgEl.value;
+  const chars = (s) => Array.from(typeof s === 'string' ? s : '');
+  function span(cls, text) {
+    const e = document.createElement('span');
+    e.className = cls;
+    e.textContent = text;
+    return e;
+  }
+
+  // A duration needs a speed, so the board sends units and the app does the arithmetic
+  // (SPEC.md section 6.3): units x 1200 / wpm milliseconds.
+  const seconds = (units, w, places) => (units * 1200 / w / 1000).toFixed(places);
+  function fmtDot(w) {
+    const ms = 1200 / w;
+    return Number.isInteger(ms) ? String(ms) : ms.toFixed(1);
+  }
+
+  // Characters the user cannot see must still be visible where they are: a newline, a tab,
+  // the U+00A0 that iOS inserts on its own (SPEC.md section 3.1). Named ones get a symbol,
+  // the rest their code point.
+  const NAMED = {
+    '\t': ['⇥', 'tab'], '\n': ['⏎', 'newline'], '\r': ['␍', 'carriage return'],
+    '\u000b': ['␋', 'vertical tab'], '\u000c': ['␌', 'form feed'],
+    '\u00a0': ['⍽', 'no-break space'],
+  };
+  let INVISIBLE;
+  try { INVISIBLE = new RegExp('[\\p{C}\\p{Z}\\p{M}]', 'u'); }
+  catch (e) { INVISIBLE = /[\u0000-\u001f\u007f-\u00a0\u2000-\u200f\u2028-\u202f\ufeff]/; }
+  const codePoint = (ch) => 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
+  function shown(ch) {
+    if (ch === ' ') return null;
+    if (NAMED[ch]) return { text: NAMED[ch][0], title: codePoint(ch) + ' ' + NAMED[ch][1] };
+    if (INVISIBLE.test(ch)) return { text: codePoint(ch), title: codePoint(ch) };
+    return null;
+  }
+  const pretty = (code) => (code || '').replace(/\./g, '·').replace(/-/g, '–');
+
+  // The preview is the board's normalised string, not the text box, so the board's positions
+  // need no translation (SPEC.md section 3.2). Indexed by code point, never with norm[i]:
+  // an emoji is one position.
+  function buildPreview() {
+    pv.textContent = '';
+    if (!check) {
+      pv.className = 'pv empty';
+      pv.textContent = "The board's reading of your message appears here.";
+      return;
+    }
+    const r = check.reply;
+    if (r.oversized) {
+      // The board never saw it, so there is no reading of it to show.
+      pv.className = 'pv empty';
+      pv.textContent = 'Too long for the board to read.';
+      return;
+    }
+    const cps = chars(r.norm);
+    pv.className = 'pv' + (cps.length ? '' : ' empty');
+    const morse = Array.isArray(r.morse) ? r.morse : [];
+    const bad = new Set([].concat(Array.isArray(r.bad) ? r.bad : [], sendBad || []));
+    const frag = document.createDocumentFragment();
+    let word = null;   // a word's cells wrap together where they fit
+    cps.forEach((ch, i) => {
+      const cell = span('pc' + (ch === ' ' ? ' sp' : '') + (bad.has(i) ? ' bad' : ''), '');
+      const s = shown(ch);
+      if (s) cell.title = s.title;
+      cell.appendChild(span(s && s.text.length > 1 ? 'ch sym' : 'ch', s ? s.text : ch));
+      cell.appendChild(span('mo', pretty(morse[i])));
+      if (ch === ' ') { word = null; frag.appendChild(cell); return; }
+      if (!word) word = frag.appendChild(span('pw', ''));
+      word.appendChild(cell);
+    });
+    pv.appendChild(frag);
+  }
+
+  const SMART = /[\u2018\u2019\u201c\u201d\u2013\u2014\u2026]/;
+  function describeCheck(r) {
+    const cps = chars(r.norm);
+    const bad = Array.isArray(r.bad) ? r.bad : [];
+    const many = bad.length === 1 ? '' : 's';
+    let t;
+    if (r.error === 'empty message') {
+      t = 'Nothing to send: the message is empty once spaces are trimmed.';
+    } else if (r.error === 'message too long' && r.oversized) {
+      t = `Too long: ${r.length} characters as typed, and the limit is ${MAX_CHARS}.`;
+    } else if (r.error === 'message too long') {
+      t = `Too long: ${cps.length} characters after normalisation, and the limit is ${MAX_CHARS}.`;
+    } else if (r.error === 'unsupported characters') {
+      t = `${bad.length} unsupported character${many}, marked in red. Morse has no code for ` +
+          (bad.length === 1 ? 'it' : 'them') + ' here.';
+    } else {
+      t = 'The board refused it: ' + (r.error || 'no reason given') + '.';
+    }
+    if (bad.length && r.error !== 'unsupported characters') {
+      t += ` Also ${bad.length} unsupported character${many}, marked in red.`;
+    }
+    if (bad.some((i) => SMART.test(cps[i] || ''))) {
+      t += ' Curly quotes and long dashes come from iOS Smart Punctuation ' +
+           '(Settings › General › Keyboard).';
+    }
+    return t;
+  }
+
+  function runCheck() {
+    clearTimeout(checkTimer);
+    checkTimer = null;
+    const text = msgEl.value;
+    const seq = ++checkSeq;
+    if (text === '') { check = null; buildPreview(); render(); return; }
+    checkLost = false;
+    if (!connected) { render(); return; }   // stale; the reconnect asks again
+    request({ cmd: 'check', text }).then((reply) => {
+      if (seq !== checkSeq) return;        // a newer check has gone out since
+      if (reply) { check = { text, reply }; buildPreview(); }
+      else checkLost = true;
+      render();
+    });
+  }
+
+  msgEl.addEventListener('input', () => {
+    sendErr.textContent = '';
+    if (sendBad) { sendBad = null; buildPreview(); }
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(runCheck, CHECK_AFTER_MS);
+    render();
+  });
+
+  wpmEl.addEventListener('input', render);
+  wpmEl.addEventListener('change', () => save(KEY_WPM, wpm()));
+
+  function truncate(s, n) {
+    const cps = chars(s);
+    return cps.length > n ? cps.slice(0, n - 1).join('') + '…' : cps.join('');
+  }
+
+  function refused(reply) {
+    if (!reply) return connected ? 'The board did not answer.' : 'Not connected.';
+    return 'The board refused it: ' + (reply.error || 'no reason given') + '.';
+  }
+
+  sendBtn.addEventListener('click', () => {
+    if (sendBtn.disabled) return;
+    const text = msgEl.value;
+    sendPending = true;
+    sendErr.textContent = '';
+    render();
+    // The board revalidates everything from scratch (SPEC.md section 6.3); the check that
+    // enabled this button is a courtesy, not a guarantee.
+    request({ cmd: 'send', text, wpm: wpm() }).then((reply) => {
+      sendPending = false;
+      if (reply && reply.oversized) {
+        // A `send` frame is a few bytes longer than the `check` that passed, so this text can
+        // fit one and not the other. It never left the phone: say so where the check's
+        // verdict goes, which also keeps Send disabled until the text changes.
+        if (msgEl.value === text) { check = { text, reply }; buildPreview(); }
+        else sendErr.textContent = describeCheck(reply);
+      } else if (!reply || !reply.ok) {
+        sendErr.textContent = refused(reply);
+        if (reply && Array.isArray(reply.bad) && reply.bad.length && msgEl.value === text) {
+          sendBad = reply.bad;
+          buildPreview();
+        }
+      }
+      render();
+    });
+  });
+
+  // Resend means the board's last accepted message, at the speed the slider shows now
+  // (SPEC.md section 4). The button carries that text so it is never a surprise.
+  resendBtn.addEventListener('click', () => {
+    if (resendBtn.disabled) return;
+    resendPending = true;
+    sendErr.textContent = '';
+    render();
+    request({ cmd: 'resend', wpm: wpm() }).then((reply) => {
+      resendPending = false;
+      if (!reply || !reply.ok) sendErr.textContent = refused(reply);
+      render();
+    });
+  });
+
+  // Stop does not set idle itself: the board says idle once the transmitter has actually
+  // let go (SPEC.md section 6.3), and only that `state` re-enables anything.
+  stopBtn.addEventListener('click', () => {
+    if (stopBtn.disabled) return;
+    stopPending = true;
+    render();
+    request({ cmd: 'stop' }).then((reply) => {
+      if (!reply || !reply.ok) { stopPending = false; sendErr.textContent = refused(reply); }
+      render();
+    });
+  });
+
+  function renderMessage() {
+    const isFresh = fresh();
+    const r = check && check.reply;
+
+    // The limit applies after normalisation (SPEC.md section 3.1), which only the board does:
+    // trailing or doubled spaces can make the box far longer than the message. So the count
+    // is the board's once the check is fresh, and until then the box's, marked as unchecked.
+    let counted = null;
+    if (isFresh) {
+      if (Number.isInteger(r.length)) counted = r.length;
+      else if (typeof r.norm === 'string') counted = chars(r.norm).length;
+    }
+    const typed = chars(msgEl.value).length;
+    const unchecked = typed > 0 && counted === null;
+    const n = unchecked ? typed : (counted || 0);
+    countEl.textContent = `${unchecked ? '≈' : ''}${n} / ${MAX_CHARS}`;
+    countEl.title = unchecked ? 'Counted as typed; the board has not checked it yet'
+                              : 'Characters after normalisation, as the board counts them';
+    countEl.classList.toggle('unchecked', unchecked);
+    countEl.classList.toggle('over', !unchecked && n > MAX_CHARS);
+
+    const w = wpm();
+    wpmOut.textContent = `${w} WPM · dot ${fmtDot(w)} ms`;
+
+    pvBox.classList.toggle('stale', !connected || (!!check && !isFresh));
+    if (!connected) pvNote.textContent = 'Stale: not connected, so the board cannot check it.';
+    else if (msgEl.value !== '' && !isFresh) {
+      pvNote.textContent = checkLost ? 'The board did not answer. Edit the text to ask again.'
+                                     : 'Checking with the board…';
+    }
+    else pvNote.textContent = '';
+
+    checkErr.textContent = r && !r.ok ? describeCheck(r) : '';
+    durEl.textContent = r && r.ok && r.units > 0
+      ? `${r.units} units · ${seconds(r.units, w, 2)} s at ${w} WPM`
+      : '';
+
+    const busy = sending();
+    sendBtn.disabled = !connected || !board || busy || sendPending ||
+                       msgEl.value === '' || !isFresh || !r.ok;
+    const m = board && board.message;
+    resendBtn.disabled = !connected || !board || !m || busy || resendPending;
+    resendBtn.textContent = m
+      ? `Resend “${truncate(m.text || m.norm || '', 28)}”`
+      : 'Resend (nothing sent yet)';
+    stopBtn.disabled = !connected || !busy || stopPending;
+  }
+
+  const seededWpm = load(KEY_WPM);
+  if (Number.isInteger(seededWpm) && seededWpm >= 5 && seededWpm <= 40) {
+    wpmEl.value = String(seededWpm);
+  }
 
   window.morse = { raw };
   render();
