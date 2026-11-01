@@ -1,0 +1,4 @@
+.pio/
+.vscode/
+firmware/include/secrets.h
+__pycache__/
