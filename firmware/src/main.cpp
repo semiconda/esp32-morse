@@ -1,9 +1,11 @@
 // esp32-morse — the board makes its own network, serves the app, and talks to it over a
-// WebSocket. T3 adds the LED and its panel; the transmitter arrives in T4.
+// WebSocket; it checks messages, and hands accepted ones to the transmitter task, which
+// blinks them on the LED.
 //
 // Two rules inherited from the class firmware, both load-bearing:
 //   * The WebSocket is touched from the main task only. The async-TCP send queue is not
-//     safe to feed from another task, and T4 adds a task.
+//     safe to feed from another task — the transmitter is one — so the transmitter talks to
+//     loop() through a ring buffer and an end flag (transmitter.h), never through the socket.
 //   * loop() never calls delay().
 
 #include <Arduino.h>
@@ -20,7 +22,9 @@
 
 #include "app_html.h"   // generated from app/index.html by scripts/embed_app.py
 #include "led.h"
+#include "morse.h"
 #include "request.h"
+#include "transmitter.h"
 
 // ---------------------------------------------------------------------------------------
 // Network
@@ -77,6 +81,21 @@ static const uint32_t kSerialClient = 0;
 static String serialLine;
 static bool serialOverflow = false;
 
+// The message in flight while sending, and the last accepted one while idle — the one
+// Resend repeats (SPEC.md section 4). Replaced only when a send is accepted, which cannot
+// happen while one is running, so the transmitter's pointer into `steps` stays valid for as
+// long as it is used.
+struct Message {
+  String text;               // as received
+  morse::Checked checked;    // norm, morse, units
+  std::vector<morse::Step> steps;
+  uint16_t wpm = 0;          // the speed it is (or was last) sent at
+};
+static std::unique_ptr<Message> lastMessage;
+
+// For the serial log only: how many events the transmitter produced for this run.
+static uint32_t eventsThisRun = 0;
+
 static uint32_t lastTickMs = 0;
 static const uint32_t kTickMs = 50;
 
@@ -112,18 +131,36 @@ static void broadcastCritical(JsonDocument& doc) {
 
 // Every connection begins with this, so an app that has just connected — or reconnected
 // after the phone slept — resynchronises without having to ask for anything.
+//
+// It carries the message's `morse`, not just its text: a phone that joins mid-transmission,
+// or did not type the message, otherwise cannot render the third level of the live display,
+// and a phone that reconnects cannot label its Resend control (SPEC.md section 6.3).
+static void fillMorse(JsonArray out, const morse::Checked& c) {
+  for (const std::string& code : c.morse) out.add(code.c_str());
+}
+
 static void fillState(JsonObject out) {
   out["type"] = "state";
-  out["state"] = "idle";
-  out["wpm"] = nullptr;
+  out["state"] = tx::running() ? "sending" : "idle";
   const led::Setting s = led::setting();
   JsonObject l = out["led"].to<JsonObject>();
   l["r"] = s.r;
   l["g"] = s.g;
   l["b"] = s.b;
   l["brightness"] = s.brightness;
-  out["dropped"] = 0;
-  out["message"] = nullptr;
+  // In `state` as well as in `done`, because a run ended with Stop produces no `done`.
+  out["dropped"] = tx::dropped();
+  if (lastMessage) {
+    out["wpm"] = lastMessage->wpm;
+    JsonObject m = out["message"].to<JsonObject>();
+    m["text"] = lastMessage->text;
+    m["norm"] = lastMessage->checked.norm;
+    fillMorse(m["morse"].to<JsonArray>(), lastMessage->checked);
+    m["units"] = lastMessage->checked.units;
+  } else {
+    out["wpm"] = nullptr;
+    out["message"] = nullptr;
+  }
   out["fw"] = FW_VERSION;
   out["clients"] = WiFi.softAPgetStationNum();
 }
@@ -164,12 +201,105 @@ static void fail(JsonDocument& res, const char* error) {
 
 // SPEC.md section 9: colour and brightness, validated field by field, kept in RAM, previewed
 // for 2 s, and reported in `state` so every phone shows what the LED is actually doing.
+//
+// Rejected during a transmission: the LED is the instrument being measured, and its
+// settings may not change in the middle of a measurement (SPEC.md section 9.1).
 static void cmdLed(JsonDocument& req, JsonDocument& res) {
+  if (tx::running()) return fail(res, "busy: the LED cannot change during a transmission");
   request::Led v;
   if (const char* err = request::led(req.as<JsonObjectConst>(), v)) return fail(res, err);
   led::set({v.r, v.g, v.b, v.brightness});
   res["ok"] = true;
   broadcastState();
+}
+
+// The text field as bytes, embedded NULs and all: as<const char*>() would stop at the
+// first one and quietly validate a shorter message than the one that was sent.
+static bool textField(JsonDocument& req, std::string& out) {
+  if (!req["text"].is<JsonString>()) return false;
+  JsonString s = req["text"].as<JsonString>();
+  out.assign(s.c_str(), s.size());
+  return true;
+}
+
+static void fillBad(JsonDocument& res, const morse::Checked& c) {
+  JsonArray bad = res["bad"].to<JsonArray>();
+  for (uint16_t i : c.bad) bad.add(i);
+}
+
+// SPEC.md section 6.3: the translation and the positions of anything unsupported, in the
+// board's normalised message, which the app renders as it is. No duration: that needs a
+// speed, and the app can multiply units by 1200 / wpm itself.
+static void cmdCheck(JsonDocument& req, JsonDocument& res) {
+  std::string text;
+  if (!textField(req, text)) return fail(res, "text is missing");
+  const morse::Checked c = morse::check(text);
+  res["ok"] = c.ok();
+  if (!c.ok()) res["error"] = morse::checkErrorText(c.error);
+  res["norm"] = c.norm;
+  fillBad(res, c);
+  fillMorse(res["morse"].to<JsonArray>(), c);
+  res["units"] = c.units;
+  res["length"] = c.length;
+}
+
+// Accepting a transmission, for send and resend alike. In this order (SPEC.md section 9.1):
+// cancel the preview, force black, give the LED to the transmitter — then start it.
+static void startTransmission(uint16_t wpm) {
+  lastMessage->wpm = wpm;
+  eventsThisRun = 0;
+  led::handToTransmitter();
+  tx::start(&lastMessage->steps, wpm);
+  const uint64_t predictedUs = morse::durationUs(lastMessage->steps, wpm);
+  Serial.printf("[tx] sending %u chars at %u WPM: %u units, %u steps, predicted %llu.%03llu s\n",
+                (unsigned)lastMessage->checked.length, wpm, (unsigned)lastMessage->checked.units,
+                (unsigned)lastMessage->steps.size(), predictedUs / 1000000,
+                (predictedUs / 1000) % 1000);
+  broadcastState();
+}
+
+// SPEC.md sections 3.2, 2.4, 4: everything is revalidated from scratch — the characters, the
+// length, the speed — and no earlier `check` is trusted. A send while busy is rejected, not
+// queued.
+static void cmdSend(JsonDocument& req, JsonDocument& res) {
+  if (tx::running()) return fail(res, "busy");
+  std::string text;
+  if (!textField(req, text)) return fail(res, "text is missing");
+  morse::Checked c = morse::check(text);
+  if (!c.ok()) {
+    fail(res, morse::checkErrorText(c.error));
+    fillBad(res, c);
+    return;
+  }
+  uint16_t wpm;
+  if (const char* err = request::wpm(req["wpm"], wpm)) return fail(res, err);
+
+  // Translated once, up front, before anything is transmitted (section 3.3).
+  std::unique_ptr<Message> m(new Message);
+  m->text = String(text.c_str());
+  m->steps = morse::translate(c);
+  m->checked = std::move(c);
+  lastMessage = std::move(m);
+  startTransmission(wpm);
+  res["ok"] = true;
+}
+
+// Resend repeats the board's last accepted message, not the text box, at the speed given
+// now. It carries only a speed, so it means the same thing on every phone (section 4).
+static void cmdResend(JsonDocument& req, JsonDocument& res) {
+  if (tx::running()) return fail(res, "busy");
+  if (!lastMessage) return fail(res, "nothing sent yet");
+  uint16_t wpm;
+  if (const char* err = request::wpm(req["wpm"], wpm)) return fail(res, err);
+  startTransmission(wpm);
+  res["ok"] = true;
+}
+
+// Always succeeds. `state: idle` follows only once the transmitter has acknowledged, never on
+// receipt of this — otherwise a quick Resend would be rejected as busy (section 6.3).
+static void cmdStop(JsonDocument& /*req*/, JsonDocument& res) {
+  tx::requestStop();
+  res["ok"] = true;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -189,7 +319,15 @@ static void handleRequest(uint32_t clientId, const String& text) {
   JsonDocument res;
   if (req["id"].is<const char*>() || req["id"].is<int>()) res["id"] = req["id"];
 
-  if (strcmp(cmd, "led") == 0) {
+  if (strcmp(cmd, "check") == 0) {
+    cmdCheck(req, res);
+  } else if (strcmp(cmd, "send") == 0) {
+    cmdSend(req, res);
+  } else if (strcmp(cmd, "resend") == 0) {
+    cmdResend(req, res);
+  } else if (strcmp(cmd, "stop") == 0) {
+    cmdStop(req, res);
+  } else if (strcmp(cmd, "led") == 0) {
     cmdLed(req, res);
   } else {
     res["ok"] = false;
@@ -211,26 +349,65 @@ static void post(PendingKind kind, uint32_t client, String text = String()) {
   pending.push_back({kind, client, std::move(text)});
 }
 
+// A frame larger than one TCP segment (lwIP's MSS here is 1436 bytes) reaches us in pieces,
+// one WS_EVT_DATA per segment, each carrying the frame's total length and the offset of the
+// piece. They are joined here, up to the 4096-byte limit. Treating every piece as a frame of
+// its own would silently drop anything over ~1.4 KB: a pasted paragraph would get no reply
+// at all rather than "message too long".
+//
+// All WebSocket events arrive on the one async-TCP task, so these buffers need no lock.
+struct Partial {
+  uint32_t client;
+  String text;
+};
+static std::vector<Partial> partials;
+
+static void forgetPartial(uint32_t client) {
+  partials.erase(std::remove_if(partials.begin(), partials.end(),
+                                [client](const Partial& p) { return p.client == client; }),
+                 partials.end());
+}
+
 static void onWsEvent(AsyncWebSocket* /*s*/, AsyncWebSocketClient* client, AwsEventType type,
                       void* arg, uint8_t* data, size_t len) {
   if (type == WS_EVT_CONNECT) {
     post(PendingKind::Connect, client->id());
   } else if (type == WS_EVT_DISCONNECT) {
+    forgetPartial(client->id());
     post(PendingKind::Disconnect, client->id());
   } else if (type == WS_EVT_DATA) {
     AwsFrameInfo* info = (AwsFrameInfo*)arg;
-    // Only complete, single-frame text messages. Without this test you get partial payloads
-    // and deserializeJson fails intermittently on larger messages — the classic
-    // ESPAsyncWebServer trap.
-    if (!(info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT)) {
+    const uint32_t id = client->id();
+    // Only text frames that are a whole message. A message split by the sender into several
+    // WebSocket frames (final = false, then continuations) is not something the app sends.
+    if (!info->final || info->opcode != WS_TEXT) return;
+    if (info->len > kMaxFrameBytes) {
+      if (info->index == 0) {
+        Serial.printf("[ws] oversized frame from %u (%llu bytes), dropped\n", id,
+                      (unsigned long long)info->len);
+      }
       return;
     }
-    if (len > kMaxFrameBytes) {
-      Serial.printf("[ws] oversized frame from %u (%u bytes), dropped\n", client->id(),
-                    (unsigned)len);
+    if (info->index == 0 && len == info->len) {   // the common case: one piece
+      post(PendingKind::Frame, id, String((const char*)data, len));
       return;
     }
-    post(PendingKind::Frame, client->id(), String((const char*)data, len));
+    if (info->index == 0) {
+      forgetPartial(id);
+      partials.push_back({id, String()});
+      partials.back().text.reserve(info->len);
+    }
+    auto it = std::find_if(partials.begin(), partials.end(),
+                           [id](const Partial& p) { return p.client == id; });
+    if (it == partials.end() || it->text.length() != info->index) {
+      forgetPartial(id);   // a piece out of order: nothing sensible to join it to
+      return;
+    }
+    it->text.concat((const char*)data, len);
+    if (it->text.length() == info->len) {
+      post(PendingKind::Frame, id, std::move(it->text));
+      partials.erase(it);
+    }
   }
 }
 
@@ -293,13 +470,44 @@ void setup() {
   // the core counts its retries down from this value. A line that does not fit is lost,
   // which is what a log with nobody reading it should do.
   Serial.setTxTimeoutMs(10);
+  // The receive queue holds 256 bytes unless told otherwise, and a command line arrives in
+  // one USB burst: a 256-character message is ~280 bytes and overflowed it, losing bytes
+  // and corrupting the next line. Sized for the longest line the handler accepts. Must be
+  // set before begin().
+  Serial.setRxBufferSize(kMaxFrameBytes + 64);
   Serial.begin(115200);
   delay(300);   // give USB-CDC a moment, or the first lines are lost
   Serial.printf("\n[boot] esp32-morse %s\n", FW_VERSION);
 
   led::begin();
+  tx::begin();
   startWiFi();
   startServer();
+}
+
+// What the transmitter has done since the last loop(). The end is read BEFORE the ring is
+// drained: the transmitter pushes its last event and then publishes the end, so reading in
+// this order guarantees every event of the run is drained before the end is acted on.
+static void pollTransmitter() {
+  uint32_t elapsedMs = 0;
+  const tx::End end = tx::poll(elapsedMs);
+
+  tx::Event ev;
+  while (tx::pop(ev)) {
+    ++eventsThisRun;
+    // T5 broadcasts these as `elem`. Until then they are drained and counted, so the ring
+    // never fills.
+  }
+
+  if (end == tx::End::Done) {
+    Serial.printf("[done] elapsed_ms=%u dropped=%u events=%u/%u\n", elapsedMs,
+                  tx::dropped(), eventsThisRun, (unsigned)lastMessage->steps.size());
+    broadcastState();
+  } else if (end == tx::End::Stopped) {
+    Serial.printf("[tx] stopped after %u of %u events\n", eventsThisRun,
+                  (unsigned)lastMessage->steps.size());
+    broadcastState();
+  }
 }
 
 void loop() {
@@ -328,6 +536,7 @@ void loop() {
   }
 
   pollSerial();
+  pollTransmitter();
 
   const uint32_t now = millis();
   led::tick(now);
@@ -344,10 +553,10 @@ void loop() {
   // is often enough to answer "is the access point actually up?" without being noise.
   if (now - lastHeartbeatMs >= kHeartbeatMs) {
     lastHeartbeatMs = now;
-    Serial.printf("[status] up %lus  AP \"%s\" on %s  stations=%u  ws=%u  heap=%u\n",
+    Serial.printf("[status] up %lus  AP \"%s\" on %s  stations=%u  ws=%u  tx=%s  heap=%u\n",
                   (unsigned long)(now / 1000), kApSsid,
                   WiFi.softAPIP().toString().c_str(),
                   WiFi.softAPgetStationNum(), (unsigned)clients.size(),
-                  (unsigned)ESP.getFreeHeap());
+                  tx::running() ? "sending" : "idle", (unsigned)ESP.getFreeHeap());
   }
 }
