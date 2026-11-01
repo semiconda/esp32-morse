@@ -19,24 +19,117 @@
 <meta name="color-scheme" content="dark light">
 <title>esp32-morse</title>
 <style>
+  /* A telegraph operator's desk: walnut, brass, paper tape. Every colour is a token here;
+     each text/background pair is checked for WCAG AA in both schemes. Dark is the default. */
   :root {
-    --bg: #0e1113;
-    --panel: #171b1f;
-    --line: #272d33;
-    --well: #0b0e10;
-    --text: #e7ecef;
-    --dim: #8c979f;
-    --ok: #4ade80;
-    --warn: #fbbf24;
-    --bad: #f87171;
-    --accent: #38bdf8;
+    color-scheme: dark;
+    --bg: #15100c;
+    --bg-top: #261b12;
+    --panel: #221a13;
+    --panel-2: #1c150f;
+    --line: #3e3125;
+    --edge: #8c7558;
+    --well: #110c08;
+    --text: #f3e9d6;
+    --dim: #b9a98f;
+    --ok: #93d48b;
+    --warn: #f2c35b;
+    --bad: #ff9686;
+    --focus: #e0b85e;
+    --btn: #2e231a;
+    --btn-ink: #f3e9d6;
+    --btn-depth: #0b0805;
+    --dis: #1b140f;
+    --dis-ink: #a3937a;
+    --dis-edge: #7d6a54;
+    --send-a: #e6c46f;
+    --send-b: #b98e3a;
+    --send-edge: #e9cd85;
+    --send-ink: #22170a;
+    --stop-a: #a3301f;
+    --stop-b: #85241a;
+    --stop-edge: #d4604f;
+    --stop-ink: #fff1ea;
+    --onair: #b9332a;
+    --onair-ink: #fff4ee;
+    --mark-off: #846e51;
+    --mark-on: #ffd36b;
+    --mark-ring: #6b4f1c;
+    --hole: #1c150f;
+    --brass-ui: #b88f3e;
+    --wood-rim: #a3744c;
+    --paper-edge: #0b0805;
+    --shadow: 0 1px 0 #ffffff0a inset, 0 6px 18px #00000059;
+    /* the same in both schemes: paper is paper, brass is brass */
+    --plate-a: #e8cc85;
+    --plate-b: #b88f3e;
+    --plate-ink: #2a1c0b;
+    --paper: #f2e8cc;
+    --paper-word: #e2cd94;
+    --ink: #251a10;
+    --ink-dim: #645239;
+    --ink-bad: #a3241a;
+    --bad-tint: #f6d5c6;
+    --stamp: #9a2a1d;
+    --stamp-ink: #fff4e6;
+    --glass: #2c241d;
+    --wood-a: #74492a;
+    --wood-b: #4b2e19;
+    --wood-edge: #2b190c;
+    --metal-a: #f0d488;
+    --metal-b: #a87f30;
+    --metal-edge: #4a3410;
+    --ebon: #17120f;
+    --ebon-edge: #9a8573;
+    --spark: #fff6d6;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg: #ece2cc;
+      --bg-top: #f6efe0;
+      --panel: #fbf7ee;
+      --panel-2: #f4ecdb;
+      --line: #d5c4a2;
+      --edge: #8a7455;
+      --well: #fffdf8;
+      --text: #271c12;
+      --dim: #5d4d3a;
+      --ok: #2c672c;
+      --warn: #855000;
+      --bad: #ab2619;
+      --focus: #7a5512;
+      --btn: #efe5d1;
+      --btn-ink: #271c12;
+      --btn-depth: #c9b791;
+      --dis: #ebe3d3;
+      --dis-ink: #6a5b48;
+      --dis-edge: #93805f;
+      --send-edge: #6e5016;
+      --stop-a: #a92f21;
+      --stop-b: #8e2519;
+      --stop-edge: #6a1a11;
+      --stop-ink: #ffffff;
+      --onair: #ad2c22;
+      --onair-ink: #ffffff;
+      --mark-off: #8a7455;
+      --mark-on: #b97300;
+      --mark-ring: #2e1d00;
+      --hole: #cdbb98;
+      --ebon-edge: #000000;
+      --brass-ui: #8a6416;
+      --wood-rim: #2b190c;
+      --paper-edge: #8f7a58;
+      --shadow: 0 1px 0 #ffffffb3 inset, 0 4px 14px #5a3c1426;
+    }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   [hidden] { display: none !important; }
   html, body { margin: 0; padding: 0; }
   body {
-    background: var(--bg);
+    background: var(--bg) linear-gradient(var(--bg-top), var(--bg) 360px) no-repeat;
     color: var(--text);
     font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     padding: 16px;
@@ -45,53 +138,90 @@
     margin: 0 auto;
     min-height: 100vh;
   }
-  h1 {
-    font-size: 1.15rem;
-    letter-spacing: .02em;
-    margin: 4px 0 2px;
-  }
-  .sub { color: var(--dim); font-size: .85rem; margin-bottom: 18px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
+  /* The masthead: the name, and MORSE in Morse beneath it. */
+  .mast { text-align: center; margin: 8px 0 18px; }
+  h1 { font: 600 1.6rem/1.1 var(--serif); font-variant: small-caps; letter-spacing: .08em;
+    margin: 0; }
+  .orn { display: flex; align-items: flex-start; justify-content: center; gap: 14px;
+    margin: 12px 0 10px; }
+  .orn::before, .orn::after { content: ""; flex: 0 1 44px; height: 1px; margin-top: 3px; }
+  .orn::before { background: linear-gradient(90deg, transparent, var(--brass-ui)); }
+  .orn::after  { background: linear-gradient(90deg, var(--brass-ui), transparent); }
+  .og { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .sig { display: flex; gap: 4px; }
+  .sig i { display: block; width: 6px; height: 6px; border-radius: 3px; background: var(--brass-ui); }
+  .sig i.h { width: 18px; }
+  .og b { font: 600 .66rem/1 var(--serif); letter-spacing: .1em; color: var(--dim); }
+  .sub { color: var(--dim); font-size: .88rem; }
+
+  /* The status plate. */
   .status {
     display: flex;
     align-items: center;
-    gap: 10px;
-    background: var(--panel);
+    gap: 12px;
+    background: linear-gradient(var(--panel), var(--panel-2));
     border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 12px 14px;
+    border-radius: 10px;
+    padding: 11px 14px;
     margin-bottom: 16px;
+    box-shadow: var(--shadow);
   }
   .dot {
-    width: 11px; height: 11px; flex: 0 0 11px;
+    width: 14px; height: 14px; flex: 0 0 14px;
     border-radius: 50%;
-    background: var(--dim);
+    background: var(--glass);
+    box-shadow: 0 0 0 2px var(--brass-ui);
     transition: background .2s;
   }
-  .dot.ok   { background: var(--ok);   box-shadow: 0 0 10px #4ade8066; }
+  .dot.ok   { background: var(--ok); box-shadow: 0 0 0 2px var(--brass-ui), 0 0 10px var(--ok); }
   .dot.wait { background: var(--warn); }
   .dot.bad  { background: var(--bad); }
-  .status-text { font-size: .92rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .dot.wait { animation: pulse 1.1s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .45; } }
+  }
+  .status-text { font: 600 .98rem/1.3 var(--serif); letter-spacing: .02em; }
   .status-sub  { color: var(--dim); font-size: .8rem; }
-  .pill { margin-left: auto; flex: 0 0 auto; font-size: .72rem; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px;
-    border: 1px solid var(--line); color: var(--dim); }
-  .pill.on { background: var(--accent); border-color: var(--accent); color: #04121a; }
+  .pill { margin-left: auto; flex: 0 0 auto; font-size: .7rem; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase; padding: 4px 9px; border-radius: 4px;
+    border: 1px solid var(--edge); color: var(--dim); }
+  .pill.on { background: var(--onair); border-color: var(--onair); color: var(--onair-ink);
+    box-shadow: 0 0 12px #d2402f80; }
 
+  /* Panels: a walnut board with four brass screws and an engraved brass nameplate. */
   .panel {
-    background: var(--panel);
+    position: relative;
+    background: linear-gradient(var(--panel), var(--panel-2));
     border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 14px;
+    border-radius: 10px;
+    padding: 16px;
     margin-bottom: 14px;
+    box-shadow: var(--shadow);
+  }
+  .panel::before {
+    content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    pointer-events: none; border-radius: inherit;
+    background:
+      radial-gradient(circle at 8px 8px, var(--brass-ui) 2.2px, transparent 2.8px),
+      radial-gradient(circle at calc(100% - 8px) 8px, var(--brass-ui) 2.2px, transparent 2.8px),
+      radial-gradient(circle at 8px calc(100% - 8px), var(--brass-ui) 2.2px, transparent 2.8px),
+      radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), var(--brass-ui) 2.2px, transparent 2.8px);
   }
   .panel h2 {
-    font-size: .78rem;
-    text-transform: uppercase;
-    letter-spacing: .09em;
-    color: var(--dim);
-    margin: 0 0 10px;
-    font-weight: 600;
+    display: inline-block;
+    margin: 0 0 12px;
+    padding: 3px 12px 2px;
+    font: 700 .82rem/1.35 var(--serif);
+    text-transform: lowercase;
+    font-variant: small-caps;
+    letter-spacing: .18em;
+    color: var(--plate-ink);
+    background: linear-gradient(var(--plate-a), var(--plate-b));
+    border-radius: 3px;
+    box-shadow: inset 0 1px 0 #fff3cf99, inset 0 -1px 0 #5a3d0e66, 0 1px 2px #00000059;
+    text-shadow: 0 1px 0 #f7e2a880;
   }
   .panel p { margin: 0 0 8px; font-size: .9rem; }
   .panel p:last-child { margin-bottom: 0; }
@@ -101,88 +231,163 @@
   .err  { color: var(--bad); }
   .note { color: var(--warn); }
   .lbl { display: flex; justify-content: space-between; font-size: .85rem; color: var(--dim); }
-  .lbl span { color: var(--text); font-variant-numeric: tabular-nums; }
+  .lbl span { color: var(--text); font-family: var(--mono); font-size: .8rem;
+    font-variant-numeric: tabular-nums; }
 
-  input[type=range] { width: 100%; margin: 6px 0 10px; accent-color: var(--accent); }
+  input[type=range] { width: 100%; margin: 6px 0 10px; accent-color: var(--focus); }
   button { font: inherit; font-size: .95rem; min-height: 44px; padding: 10px 14px;
-    border-radius: 10px; border: 1px solid var(--line); background: #20262c; color: var(--text); }
-  button:disabled { opacity: .38; }
+    border-radius: 8px; border: 1px solid var(--edge); background: var(--btn); color: var(--btn-ink);
+    box-shadow: inset 0 1px 0 #ffffff14, 0 2px 0 var(--btn-depth); }
+  button:not(:disabled):active { transform: translateY(1px);
+    box-shadow: inset 0 1px 0 #ffffff14, 0 1px 0 var(--btn-depth); }
+  button:disabled { background: var(--dis); color: var(--dis-ink); border: 1px dashed var(--dis-edge);
+    box-shadow: none; text-shadow: none; }
 
   /* The LED panel. */
   .ledrow { display: flex; align-items: center; gap: 12px; }
   .grow { flex: 1 1 auto; min-width: 0; }
   input[type=color] { -webkit-appearance: none; appearance: none;
-    width: 52px; height: 44px; flex: 0 0 52px; padding: 0; border: 1px solid var(--line);
-    border-radius: 10px; background: none; }
-  input[type=color]::-webkit-color-swatch-wrapper { padding: 3px; }
-  input[type=color]::-webkit-color-swatch { border: none; border-radius: 7px; }
-  .swatch { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%;
-    border: 1px solid var(--line); background: #000; }
-  .advice { font-size: .85rem !important; }
+    width: 52px; height: 44px; flex: 0 0 52px; padding: 0; border: 1px solid var(--edge);
+    border-radius: 8px; background: var(--btn); }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 4px; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
+  input:disabled { opacity: .55; }
+  /* a jewel lamp in a brass bezel */
+  .swatch { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%;
+    border: 4px solid var(--brass-ui); box-shadow: 0 0 0 1px var(--wood-edge), inset 0 2px 5px #00000080;
+    background: #000; }
+  .advice { font-size: .85rem !important; margin-top: 12px !important; padding: 7px 10px;
+    background: var(--well); border-left: 3px solid currentColor; border-radius: 0 6px 6px 0; }
   .advice.bad  { color: var(--bad); }
   .advice.warn { color: var(--warn); }
   .advice.ok   { color: var(--ok); }
-  #preset { margin: 4px 0 6px; }
+  #preset { margin: 4px 0 8px; }
 
   /* The message, its preview and the controls. */
   /* 16px or more, or iOS Safari zooms the page when the box takes focus. */
   textarea { width: 100%; font: 16px/1.4 var(--mono); background: var(--well); color: var(--text);
-    border: 1px solid var(--line); border-radius: 10px; padding: 10px; resize: vertical; }
+    border: 1px solid var(--edge); border-radius: 8px; padding: 10px; resize: vertical;
+    box-shadow: inset 0 2px 5px #00000040; }
+  textarea::placeholder { color: var(--dim); opacity: 1; }
   .row { display: flex; justify-content: space-between; gap: 10px; margin: 4px 0 10px; }
-  .count { font-variant-numeric: tabular-nums; color: var(--dim); }
-  .count.over { color: var(--bad); }
+  .count { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--dim); }
+  .count.over { color: var(--bad); font-weight: 700; }
   /* Counted as typed, before the board has normalised it: an estimate, so it is not red. */
-  .count.unchecked { opacity: .6; font-style: italic; }
-  .pvbox { background: var(--well); border: 1px solid var(--line); border-radius: 10px;
-    padding: 10px; margin-bottom: 6px; transition: opacity .15s; }
+  .count.unchecked { font-style: italic; }
+
+  /* Paper: the preview is typed on it, the live message is a strip of it. */
+  .pvbox, .tape { position: relative; background: var(--paper); color: var(--ink);
+    border: 1px solid var(--paper-edge); border-radius: 3px; padding: 16px 12px 10px;
+    box-shadow: 0 2px 6px #00000040; }
+  .pvbox::before, .tape::before { content: ""; position: absolute; left: 6px; right: 6px; top: 4px;
+    height: 6px; background: radial-gradient(circle, var(--hole) 2px, transparent 2.6px) 0 0 / 12px 6px repeat-x; }
+  .pvbox { margin-bottom: 6px; transition: opacity .15s; }
   .pvbox.stale { opacity: .4; filter: grayscale(1); }
-  .pv { display: flex; flex-wrap: wrap; gap: 6px 1px; font-family: var(--mono); max-height: 45vh;
+  .pv { display: flex; flex-wrap: wrap; gap: 8px 1px; font-family: var(--mono); max-height: 45vh;
     overflow-y: auto; }
-  .pv.empty { font-family: inherit; font-size: .85rem; color: var(--dim); }
+  .pv.empty { font-family: inherit; font-size: .85rem; color: var(--ink-dim); }
   .pvbox p { margin: 8px 0 0 !important; }
-  .pw { display: flex; flex-wrap: wrap; gap: 6px 1px; max-width: 100%; }
+  .pvbox .err { color: var(--ink-bad); }
+  .pvbox .muted { color: var(--ink-dim); }
+  .pw { display: flex; flex-wrap: wrap; gap: 8px 1px; max-width: 100%; }
   .pc { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto;
-    min-width: 1.25em; padding: 1px 3px; border-radius: 5px; }
+    min-width: 1.3em; padding: 1px 3px; border-radius: 3px; }
   .pc.sp { min-width: .8em; }
-  .pc .ch { font-size: 1.05rem; line-height: 1.25; white-space: pre; }
-  .pc .ch.sym { font-size: .68rem; line-height: 1.85; }
-  .pc .mo { font-size: .66rem; line-height: 1.1; color: var(--dim); min-height: 1.1em; }
-  .pc.bad { background: #f8717126; box-shadow: inset 0 0 0 1px var(--bad); }
-  .pc.bad .ch { color: var(--bad); }
-  .btns { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 4px; }
-  .primary { background: var(--accent); border-color: var(--accent); color: #04121a; font-weight: 600; }
-  .stopb { background: #7f1d1d; border-color: #b91c1c; color: #fee2e2; font-weight: 600; }
-  .primary:disabled, .stopb:disabled { background: #20262c; border-color: var(--line); color: var(--dim); }
+  .pc .ch { font-size: 1.1rem; font-weight: 600; line-height: 1.25; white-space: pre; }
+  .pc .ch.sym { font-size: .68rem; line-height: 1.95; }
+  .pc .mo { font-size: .72rem; font-weight: 700; line-height: 1.1; color: var(--ink-dim);
+    min-height: 1.1em; letter-spacing: .02em; }
+  .pc.bad { background: var(--bad-tint); box-shadow: inset 0 0 0 1.5px var(--ink-bad); }
+  .pc.bad .ch { color: var(--ink-bad); }
+  .btns { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; margin-top: 6px; }
+  .primary, .stopb { font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .primary { background: linear-gradient(var(--send-a), var(--send-b)); border-color: var(--send-edge);
+    color: var(--send-ink); text-shadow: 0 1px 0 #f7e2a880; }
+  .stopb { background: linear-gradient(var(--stop-a), var(--stop-b)); border-color: var(--stop-edge);
+    color: var(--stop-ink); }
   #sendErr { margin-top: 8px; }
 
-  /* The live display. No transitions anywhere here: an animation
-     would add its own delay on top of the link's, and at 40 WPM an element is only 30 ms. */
+  /* The live display. No transitions anywhere here: an animation would add its own delay on
+     top of the link's, and at 40 WPM an element is only 30 ms. The key and the lamp change
+     state on the same frame, by a class. */
   .live.stale { opacity: .45; }
-  .live-msg { font-family: var(--mono); font-size: .95rem; line-height: 1.8;
+  .tape { padding: 18px 12px 8px; }
+  .live-msg { font: 700 1.05rem/1.9 var(--mono); letter-spacing: .06em;
     word-break: break-word; max-height: 30vh; overflow-y: auto; }
-  .live-msg .w.cur { background: #38bdf826; border-radius: 4px; box-shadow: 0 0 0 2px #38bdf826; }
-  .live-msg .c.cc { background: var(--accent); color: #04121a; border-radius: 3px; }
-  .live-row { display: flex; align-items: center; gap: 14px; margin: 12px 0 10px; min-height: 64px; }
-  .big { font: 600 3.2rem/1 var(--mono); min-width: 1.3em; text-align: center; }
-  .els { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1 1 auto; }
-  .el { height: 14px; border-radius: 7px; background: #2b3238; }
+  .live-msg .w.cur { background: var(--paper-word); border-radius: 2px; box-shadow: 0 0 0 2px var(--paper-word); }
+  .live-msg .c.cc { background: var(--stamp); color: var(--stamp-ink); border-radius: 2px;
+    box-shadow: 0 0 0 2px var(--stamp); }
+
+  .desk { display: flex; align-items: flex-end; justify-content: center; gap: 14px; margin: 14px 0 2px; }
+  .key { display: block; flex: 1 1 auto; width: 100%; max-width: 260px; height: auto; }
+  .key .dn, .key .spark, .key.down .up { display: none; }
+  .key.down .dn, .key.down .spark { display: inline; }
+  .k-wood { fill: url(#kw); stroke: var(--wood-rim); stroke-width: 1.2; }
+  .k-edge { fill: var(--wood-edge); }
+  .k-shadow { fill: #00000040; }
+  .k-brass { fill: url(#kb); stroke: var(--metal-edge); stroke-width: .8; }
+  .k-silver { fill: #dcdcd6; stroke: var(--metal-edge); stroke-width: .6; }
+  .k-ebon { fill: var(--ebon); stroke: var(--ebon-edge); stroke-width: .8; }
+  .k-hi { fill: none; stroke: #fff6d8; stroke-opacity: .7; stroke-width: .9; stroke-linecap: round; }
+  .k-ebhi { fill: #ffffff2e; }
+  .k-slot { stroke: var(--metal-edge); stroke-width: 1.2; }
+  .s-a { stop-color: var(--metal-a); } .s-b { stop-color: var(--metal-b); }
+  .w-a { stop-color: var(--wood-a); } .w-b { stop-color: var(--wood-b); }
+  .spark { fill: var(--spark); }
+
+  .lamp { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding-bottom: 6px; }
+  .lamp b { font: 700 .66rem/1 var(--serif); letter-spacing: .16em; color: var(--dim); }
+  .ledind { width: 44px; height: 44px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffffff2e, transparent 45%), var(--glass);
+    border: 5px solid var(--brass-ui);
+    box-shadow: 0 0 0 1px var(--wood-edge), inset 0 2px 6px #000000a0; }
+  .ledind.on { background: radial-gradient(circle at 35% 30%, #ffffffc0, transparent 55%), var(--ledc, var(--ok));
+    box-shadow: 0 0 0 1px var(--wood-edge), 0 0 20px 5px var(--ledc, var(--ok)); }
+
+  .live-row { display: flex; align-items: center; gap: 14px; margin: 12px 0 10px; min-height: 80px;
+    padding: 10px 12px; background: var(--well); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: inset 0 2px 6px #00000059; }
+  .big { font: 700 2.4rem/1.5 var(--mono); width: 1.5em; height: 1.5em; flex: 0 0 auto;
+    text-align: center; color: var(--ink); background: var(--paper); border-radius: 4px;
+    box-shadow: 0 2px 0 var(--paper-edge), inset 0 0 0 1px #00000014; }
+  .els { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; flex: 1 1 auto; }
+  .el { height: 14px; border-radius: 7px; border: 2px solid var(--mark-off); }
   .el.dit { width: 14px; }
   .el.dah { width: 44px; }
-  .el.on { background: var(--accent); box-shadow: 0 0 12px var(--accent); }
-  .ledind { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; background: #1d2328;
-    border: 1px solid var(--line); }
-  .ledind.on { background: var(--ledc, var(--ok)); box-shadow: 0 0 16px var(--ledc, var(--ok)); }
+  .el.on { background: var(--mark-on); border-color: var(--mark-on);
+    box-shadow: 0 0 0 3px var(--mark-ring), 0 0 14px var(--mark-on); }
   .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 8px; }
-  .stat { background: var(--well); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
-  .stat .k { font-size: .72rem; color: var(--dim); }
-  .stat .v { font: 600 1.3rem/1.3 var(--mono); font-variant-numeric: tabular-nums; }
+  .stat { background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .stat .k { font: 700 .74rem/1.3 var(--serif); letter-spacing: .04em; color: var(--dim); }
+  .stat .v { font: 700 1.3rem/1.3 var(--mono); font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 359px) {
+    body { padding-left: 10px; padding-right: 10px; }
+    .panel { padding: 14px 12px; }
+    .orn { gap: 10px; }
+    .orn::before, .orn::after { display: none; }
+  }
 
 </style>
 </head>
 <body>
 
-<h1>esp32-morse</h1>
-<div class="sub">Type a message; the board blinks it in Morse.</div>
+<header class="mast">
+  <h1>esp32-morse</h1>
+  <!-- MORSE in Morse: -- --- .-. ... . -->
+  <div class="orn" aria-hidden="true">
+    <span class="og"><span class="sig"><i class="h"></i><i class="h"></i></span><b>M</b></span>
+    <span class="og"><span class="sig"><i class="h"></i><i class="h"></i><i class="h"></i></span><b>O</b></span>
+    <span class="og"><span class="sig"><i></i><i class="h"></i><i></i></span><b>R</b></span>
+    <span class="og"><span class="sig"><i></i><i></i><i></i></span><b>S</b></span>
+    <span class="og"><span class="sig"><i></i></span><b>E</b></span>
+  </div>
+  <div class="sub">Type a message; the board blinks it in Morse.</div>
+</header>
 
 <div class="status">
   <div class="dot" id="dot"></div>
@@ -195,11 +400,48 @@
 
 <div class="panel live" id="live" hidden>
   <h2>On the LED</h2>
-  <div class="live-msg" id="liveMsg"></div>
+  <div class="tape"><div class="live-msg" id="liveMsg"></div></div>
+  <div class="desk">
+    <!-- A straight key, side view. Two lever poses; .down on the svg shows the closed one. -->
+    <svg class="key" id="key" viewBox="0 0 240 100" role="img"
+         aria-label="Morse key: pressed during a dot or a dash">
+      <defs>
+        <linearGradient id="kb" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" class="s-a"/><stop offset="1" class="s-b"/></linearGradient>
+        <linearGradient id="kw" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" class="w-a"/><stop offset="1" class="w-b"/></linearGradient>
+        <g id="lever">
+          <path class="k-brass" d="M26 44.5 L70 43 L214 45.2 Q217 47.5 214 49.8 L70 53 L26 51.5 Z"/>
+          <path class="k-hi" d="M29 45.4 L70 44 L211 46"/>
+          <rect class="k-brass" x="145.5" y="50" width="9" height="3.2" rx=".8"/>
+          <rect class="k-silver" x="147.5" y="52.6" width="5" height="2.4" rx="1"/>
+          <rect class="k-brass" x="202.5" y="38" width="6" height="8"/>
+          <rect class="k-ebon" x="189" y="35" width="33" height="4.5" rx="2"/>
+          <ellipse class="k-ebon" cx="205.5" cy="27" rx="13" ry="9"/>
+          <ellipse class="k-ebhi" cx="200" cy="23" rx="5.5" ry="2.5"/>
+        </g>
+      </defs>
+      <ellipse class="k-shadow" cx="120" cy="95" rx="116" ry="4"/>
+      <rect class="k-wood" x="4" y="66" width="232" height="26" rx="4"/>
+      <rect class="k-edge" x="5" y="86" width="230" height="5" rx="2"/>
+      <rect class="k-brass" x="24" y="63" width="190" height="4" rx="1.5"/>
+      <rect class="k-brass" x="10" y="55" width="8" height="11"/>
+      <rect class="k-brass" x="8" y="52" width="12" height="4" rx="1"/>
+      <rect class="k-brass" x="31" y="54.2" width="6" height="9"/>
+      <path class="k-brass" d="M56 63 L84 63 L77 39 L63 39 Z"/>
+      <rect class="k-brass" x="146" y="57" width="8" height="6" rx="1"/>
+      <rect class="k-silver" x="147.5" y="55" width="5" height="2.5" rx="1"/>
+      <g class="up" transform="rotate(-4 70 48)"><use href="#lever"/></g>
+      <g class="dn"><use href="#lever"/></g>
+      <circle class="spark" cx="150" cy="55" r="2.6"/>
+      <circle class="k-brass" cx="70" cy="48" r="4.5"/>
+      <path class="k-slot" d="M67 48 H73"/>
+    </svg>
+    <div class="lamp"><div class="ledind" id="ledInd" title="The LED: lit during a dot or a dash"></div><b>LED</b></div>
+  </div>
   <div class="live-row" id="liveRow">
     <div class="big" id="bigChar"></div>
     <div class="els" id="els"></div>
-    <div class="ledind" id="ledInd" title="The LED: lit during a dot or a dash"></div>
   </div>
   <p class="small muted" id="liveNote"></p>
   <p class="small note" id="liveFast" hidden>At this speed the display lags the LED by the WiFi
@@ -845,7 +1087,8 @@
   // ---- The live display, driven by `elem` from the board ----
 
   const live = $('live'), liveMsg = $('liveMsg'), bigChar = $('bigChar'), elsEl = $('els'),
-        liveRow = $('liveRow'), ledInd = $('ledInd'), liveNote = $('liveNote'), liveFast = $('liveFast'),
+        liveRow = $('liveRow'), ledInd = $('ledInd'), keyEl = $('key'), liveNote = $('liveNote'),
+        liveFast = $('liveFast'),
         result = $('result'), rBoard = $('rBoard'), rPred = $('rPred'), rPredSub = $('rPredSub'),
         liveLost = $('liveLost');
 
@@ -900,6 +1143,7 @@
     elSpans = [];
     litEl = null;
     ledInd.classList.remove('on');
+    keyEl.classList.remove('down');
   }
 
   function onStateLive(s, wasSending, linkWasNew) {
@@ -971,7 +1215,9 @@
     if (litEl) litEl.classList.remove('on');
     litEl = mark ? elSpans[ev.e] || null : null;
     if (litEl) litEl.classList.add('on');
+    // The lamp and the key show the same thing, on the same frame: the LED lit, the key closed.
     ledInd.classList.toggle('on', mark);
+    keyEl.classList.toggle('down', mark);
   }
 
   function onDone(d) {
