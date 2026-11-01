@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<!--
+  esp32-morse — the app.
+
+  This is the page the board serves to the phone. It is compiled into the firmware binary by
+  firmware/scripts/embed_app.py, so this file is the source of truth and there is only ever
+  one upload step.
+
+  No external resources of any kind. There is no internet on the board's network, so a CDN
+  or a web font is not a slow load, it is a guaranteed failure.
+
+  T1 scope: connect, stay connected, and say so honestly. The controls arrive in T3 and T4.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>esp32-morse</title>
+<style>
+  :root {
+    --bg: #0e1113;
+    --panel: #171b1f;
+    --line: #272d33;
+    --text: #e7ecef;
+    --dim: #8c979f;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --accent: #38bdf8;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    max-width: 560px;
+    margin: 0 auto;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 1.15rem;
+    letter-spacing: .02em;
+    margin: 4px 0 2px;
+  }
+  .sub { color: var(--dim); font-size: .85rem; margin-bottom: 18px; }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+  .dot {
+    width: 11px; height: 11px; flex: 0 0 11px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: background .2s;
+  }
+  .dot.ok   { background: var(--ok);   box-shadow: 0 0 10px #4ade8066; }
+  .dot.wait { background: var(--warn); }
+  .dot.bad  { background: var(--bad); }
+  .status-text { font-size: .92rem; }
+  .status-sub  { color: var(--dim); font-size: .8rem; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .panel h2 {
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+    color: var(--dim);
+    margin: 0 0 10px;
+    font-weight: 600;
+  }
+  .panel p { margin: 0 0 8px; font-size: .9rem; }
+  .panel p:last-child { margin-bottom: 0; }
+  .muted { color: var(--dim); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .85em;
+    background: #0b0e10;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+  .todo { list-style: none; padding: 0; margin: 0; font-size: .9rem; }
+  .todo li { padding: 3px 0 3px 22px; position: relative; color: var(--dim); }
+  .todo li::before {
+    content: "○"; position: absolute; left: 4px; color: var(--line);
+  }
+  .todo li.done { color: var(--text); }
+  .todo li.done::before { content: "●"; color: var(--ok); }
+
+  footer { color: var(--dim); font-size: .78rem; margin-top: 20px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>esp32-morse</h1>
+<div class="sub">Type a message; the board blinks it in Morse.</div>
+
+<div class="status">
+  <div class="dot" id="dot"></div>
+  <div>
+    <div class="status-text" id="statusText">Connecting…</div>
+    <div class="status-sub" id="statusSub">Opening the link to the board</div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Where this is</h2>
+  <p>The board is up, serving this page and holding a WebSocket open. Nothing sends Morse
+     yet — that is the next step.</p>
+  <ul class="todo">
+    <li class="done">T1 · boots, serves the app, stays connected</li>
+    <li>T2 · the Morse core, tested on the laptop</li>
+    <li>T3 · the LED and its panel</li>
+    <li>T4 · it sends</li>
+    <li>T5 · the live display</li>
+  </ul>
+</div>
+
+<div class="panel">
+  <h2>Checking the link yourself</h2>
+  <p class="muted">From this phone's browser console:</p>
+  <p><code>morse.raw({cmd:'hello'})</code></p>
+  <p class="muted">The board replies that it does not know that command — which is the whole
+     round trip working. Commands arrive in T4.</p>
+</div>
+
+<footer>Basic Skills for Experimentalists · TIGP 2026 · Project 2</footer>
+
+<script>
+(() => {
+  'use strict';
+
+  const dot = document.getElementById('dot');
+  const statusText = document.getElementById('statusText');
+  const statusSub = document.getElementById('statusSub');
+
+  let ws = null;
+  let backoff = 500;
+  let nextId = 1;
+  const waiting = new Map();
+
+  function setStatus(cls, text, sub) {
+    dot.className = 'dot' + (cls ? ' ' + cls : '');
+    statusText.textContent = text;
+    statusSub.textContent = sub;
+  }
+
+  function connect() {
+    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+    setStatus('wait', 'Connecting…', 'Opening the link to the board');
+
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      scheduleReconnect();
+      return;
+    }
+
+    ws.onopen = () => {
+      backoff = 500;
+      setStatus('ok', 'Connected', 'Waiting for the board to say hello');
+    };
+
+    ws.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+
+      // The whole demultiplexing rule: a broadcast carries a type, a reply carries an id.
+      if (msg.type) { onBroadcast(msg); return; }
+      const pending = waiting.get(msg.id);
+      if (pending) { waiting.delete(msg.id); pending(msg); }
+      console.log('[morse] reply', msg);
+    };
+
+    // The phone sleeping drops the socket; reconnecting is normal, not an error state.
+    ws.onclose = () => { scheduleReconnect(); };
+    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+  }
+
+  function scheduleReconnect() {
+    setStatus('bad', 'Not connected',
+              'Join the WiFi network esp32-morse, then open http://192.168.4.1');
+    setTimeout(connect, backoff);
+    backoff = Math.min(backoff * 2, 5000);
+  }
+
+  function onBroadcast(msg) {
+    if (msg.type === 'state') {
+      const n = msg.clients;
+      const others = (typeof n === 'number' && n > 1) ? ` · ${n} phones on the network` : '';
+      setStatus('ok', 'Connected', `Board idle · firmware ${msg.fw || '?'}${others}`);
+    }
+  }
+
+  // Puts an arbitrary object on the socket, with an id injected so the reply can be matched
+  // and logged. T4's acceptance check needs this: the app will disable Send for an invalid
+  // message, so without a way round the app there is no way to show that the firmware
+  // rejects it too — and a check that cannot be run is not a check.
+  function raw(obj) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.warn('[morse] not connected');
+      return Promise.reject(new Error('not connected'));
+    }
+    const id = 'r' + (nextId++);
+    const msg = Object.assign({}, obj, { id });
+    return new Promise((resolve) => {
+      waiting.set(id, resolve);
+      ws.send(JSON.stringify(msg));
+      setTimeout(() => {
+        if (waiting.has(id)) {
+          waiting.delete(id);
+          console.warn('[morse] no reply to', msg);
+          resolve(null);
+        }
+      }, 3000);
+    });
+  }
+
+  window.morse = { raw };
+  connect();
+})();
+</script>
+</body>
+</html>

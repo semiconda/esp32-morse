@@ -1,13 +1,13 @@
 # esp32-morse
 
-Type a message on your phone; an ESP32-S3 sends it as Morse code on its LED
-(and on a buzzer, if one is fitted).
+Type a message on your phone; an ESP32-S3 sends it as Morse code on its LED.
 
-The board serves the page itself over its own WiFi network — no internet, no app
+The board serves the app itself over its own WiFi network — no internet, nothing
 to install. The phone sets the message and the speed; the board does the timing.
 
 - `firmware/` — PlatformIO project (Arduino, ESP32-S3)
-- `index.html` — the project website (at the repository root)
+- `app/` — the app: the page the board serves to the phone
+- `index.html` — the project website, at the repository root (not written yet)
 
 ## The number this project is checked against
 
