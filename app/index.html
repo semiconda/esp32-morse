@@ -9,7 +9,9 @@
   No external resources of any kind. There is no internet on the board's network, so a CDN
   or a web font is not a slow load, it is a guaranteed failure.
 
-  T1 scope: connect, stay connected, and say so honestly. The controls arrive in T3 and T4.
+  The app holds no Morse table (SPEC.md section 5). It sends the text as typed and renders
+  what the board answers: the normalised message, the codes, the unsupported positions.
+  T3 scope: connect, and the LED panel. Sending arrives in T4, the live display in T5.
 -->
 <html lang="en">
 <head>
@@ -22,14 +24,17 @@
     --bg: #0e1113;
     --panel: #171b1f;
     --line: #272d33;
+    --well: #0b0e10;
     --text: #e7ecef;
     --dim: #8c979f;
     --ok: #4ade80;
     --warn: #fbbf24;
     --bad: #f87171;
     --accent: #38bdf8;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; padding: 0; }
   body {
     background: var(--bg);
@@ -87,22 +92,34 @@
   }
   .panel p { margin: 0 0 8px; font-size: .9rem; }
   .panel p:last-child { margin-bottom: 0; }
+  .panel p:empty { display: none; }
   .muted { color: var(--dim); }
-  code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: .85em;
-    background: #0b0e10;
-    border: 1px solid var(--line);
-    border-radius: 5px;
-    padding: 1px 5px;
-  }
-  .todo { list-style: none; padding: 0; margin: 0; font-size: .9rem; }
-  .todo li { padding: 3px 0 3px 22px; position: relative; color: var(--dim); }
-  .todo li::before {
-    content: "○"; position: absolute; left: 4px; color: var(--line);
-  }
-  .todo li.done { color: var(--text); }
-  .todo li.done::before { content: "●"; color: var(--ok); }
+  .small { font-size: .8rem !important; }
+  .err  { color: var(--bad); }
+  .note { color: var(--warn); }
+  .lbl { display: flex; justify-content: space-between; font-size: .85rem; color: var(--dim); }
+  .lbl span { color: var(--text); font-variant-numeric: tabular-nums; }
+
+  input[type=range] { width: 100%; margin: 6px 0 10px; accent-color: var(--accent); }
+  button { font: inherit; font-size: .95rem; min-height: 44px; padding: 10px 14px;
+    border-radius: 10px; border: 1px solid var(--line); background: #20262c; color: var(--text); }
+  button:disabled { opacity: .38; }
+
+  /* The LED panel (SPEC.md section 9). */
+  .ledrow { display: flex; align-items: center; gap: 12px; }
+  .grow { flex: 1 1 auto; min-width: 0; }
+  input[type=color] { -webkit-appearance: none; appearance: none;
+    width: 52px; height: 44px; flex: 0 0 52px; padding: 0; border: 1px solid var(--line);
+    border-radius: 10px; background: none; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 3px; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 7px; }
+  .swatch { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%;
+    border: 1px solid var(--line); background: #000; }
+  .advice { font-size: .85rem !important; }
+  .advice.bad  { color: var(--bad); }
+  .advice.warn { color: var(--warn); }
+  .advice.ok   { color: var(--ok); }
+  #preset { margin: 4px 0 6px; }
 
   footer { color: var(--dim); font-size: .78rem; margin-top: 20px; text-align: center; }
 </style>
@@ -121,24 +138,25 @@
 </div>
 
 <div class="panel">
-  <h2>Where this is</h2>
-  <p>The board is up, serving this page and holding a WebSocket open. Nothing sends Morse
-     yet — that is the next step.</p>
-  <ul class="todo">
-    <li class="done">T1 · boots, serves the app, stays connected</li>
-    <li>T2 · the Morse core, tested on the laptop</li>
-    <li>T3 · the LED and its panel</li>
-    <li>T4 · it sends</li>
-    <li>T5 · the live display</li>
-  </ul>
-</div>
-
-<div class="panel">
-  <h2>Checking the link yourself</h2>
-  <p class="muted">From this phone's browser console:</p>
-  <p><code>morse.raw({cmd:'hello'})</code></p>
-  <p class="muted">The board replies that it does not know that command — which is the whole
-     round trip working. Commands arrive in T4.</p>
+  <h2>The LED</h2>
+  <div class="ledrow">
+    <input type="color" id="ledColor" value="#00ff00" aria-label="LED colour">
+    <div class="grow">
+      <label class="lbl" for="ledBri">Brightness <span id="ledBriOut">20%</span></label>
+      <input type="range" id="ledBri" min="0" max="100" step="1" value="20">
+    </div>
+    <div class="swatch" id="swatch" title="The chosen colour at the chosen brightness"></div>
+  </div>
+  <p class="advice" id="ledAdvice"></p>
+  <p class="small muted" id="ledLum"></p>
+  <button id="preset">Filming preset</button>
+  <p class="small muted">For test 2, slow-motion filming: green (0, 255, 0) at 20%, the same every
+     session. The board starts with this setting.</p>
+  <p class="small muted">Moving a control lights the LED for 2 s so you can see it. Between
+     messages it is dark, so every message starts with a clean dark-to-lit edge.</p>
+  <p class="small note" id="ledLock" hidden>The LED cannot change during a transmission: it is the
+     instrument being measured.</p>
+  <p class="small err" id="ledErr"></p>
 </div>
 
 <footer>Basic Skills for Experimentalists · TIGP 2026 · Project 2</footer>
@@ -147,14 +165,32 @@
 (() => {
   'use strict';
 
-  const dot = document.getElementById('dot');
-  const statusText = document.getElementById('statusText');
-  const statusSub = document.getElementById('statusSub');
+  const $ = (id) => document.getElementById(id);
+  const dot = $('dot'), statusText = $('statusText'), statusSub = $('statusSub');
 
   let ws = null;
   let backoff = 500;
+  let retryTimer = null;
   let nextId = 1;
   const waiting = new Map();
+
+  let connected = false;
+  let board = null;        // the last `state` broadcast: the board's word on what is going on
+  let freshLink = false;   // until the first `state` on a new connection: transitions unknown
+
+  const sending = () => !!board && board.state === 'sending';
+
+  // Browser storage only seeds the controls before the first `state` (SPEC.md sections 4,
+  // 9). It may be missing or throw (private browsing), and the app must work without it.
+  function load(key) {
+    try { const v = localStorage.getItem(key); return v === null ? null : JSON.parse(v); }
+    catch (e) { return null; }
+  }
+  function save(key, v) {
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) {}
+  }
+
+  // ---- The link ----
 
   function setStatus(cls, text, sub) {
     dot.className = 'dot' + (cls ? ' ' + cls : '');
@@ -163,50 +199,93 @@
   }
 
   function connect() {
+    retryTimer = null;
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
     setStatus('wait', 'Connecting…', 'Opening the link to the board');
 
+    let sock;
     try {
-      ws = new WebSocket(url);
+      sock = new WebSocket(url);
     } catch (e) {
       scheduleReconnect();
       return;
     }
+    ws = sock;
 
-    ws.onopen = () => {
+    sock.onopen = () => {
+      if (ws !== sock) return;
       backoff = 500;
-      setStatus('ok', 'Connected', 'Waiting for the board to say hello');
+      connected = true;
+      freshLink = true;
+      render();
     };
 
-    ws.onmessage = (ev) => {
+    sock.onmessage = (ev) => {
+      if (ws !== sock) return;
       let msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (!msg || typeof msg !== 'object') return;
 
       // The whole demultiplexing rule: a broadcast carries a type, a reply carries an id.
       if (msg.type) { onBroadcast(msg); return; }
       const pending = waiting.get(msg.id);
       if (pending) { waiting.delete(msg.id); pending(msg); }
-      console.log('[morse] reply', msg);
+      else console.log('[morse] unmatched reply', msg);
     };
 
     // The phone sleeping drops the socket; reconnecting is normal, not an error state.
-    ws.onclose = () => { scheduleReconnect(); };
-    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+    sock.onclose = () => {
+      if (ws !== sock) return;
+      ws = null;
+      lostLink();
+      scheduleReconnect();
+    };
+    sock.onerror = () => { try { sock.close(); } catch (e) {} };
   }
 
   function scheduleReconnect() {
     setStatus('bad', 'Not connected',
               'Join the WiFi esp32-morse (password: instrument), then open http://192.168.4.1');
-    setTimeout(connect, backoff);
+    retryTimer = setTimeout(connect, backoff);
     backoff = Math.min(backoff * 2, 5000);
   }
 
-  function onBroadcast(msg) {
-    if (msg.type === 'state') {
-      const n = msg.clients;
-      const others = (typeof n === 'number' && n > 1) ? ` · ${n} phones on the network` : '';
-      setStatus('ok', 'Connected', `Board idle · firmware ${msg.fw || '?'}${others}`);
+  // A phone coming back from the lock screen should not sit out the rest of a 5 s backoff.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && retryTimer) {
+      clearTimeout(retryTimer);
+      backoff = 500;
+      connect();
     }
+  });
+
+  // Everything still waiting for a reply will never get one on a dead socket.
+  function lostLink() {
+    connected = false;
+    const pending = Array.from(waiting.values());
+    waiting.clear();
+    pending.forEach((resolve) => resolve(null));
+    render();
+  }
+
+  // One request, exactly one reply, matched by id (SPEC.md section 6.3). Resolves with the
+  // reply, or with null if the link is down or the board does not answer within 3 s.
+  function post(msg) {
+    return new Promise((resolve) => {
+      waiting.set(msg.id, resolve);
+      ws.send(JSON.stringify(msg));
+      setTimeout(() => {
+        if (waiting.has(msg.id)) {
+          waiting.delete(msg.id);
+          resolve(null);
+        }
+      }, 3000);
+    });
+  }
+
+  function request(obj) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return Promise.resolve(null);
+    return post(Object.assign({}, obj, { id: 'a' + (nextId++) }));
   }
 
   // Puts an arbitrary object on the socket, with an id injected so the reply can be matched
@@ -218,22 +297,190 @@
       console.warn('[morse] not connected');
       return Promise.reject(new Error('not connected'));
     }
-    const id = 'r' + (nextId++);
-    const msg = Object.assign({}, obj, { id });
-    return new Promise((resolve) => {
-      waiting.set(id, resolve);
-      ws.send(JSON.stringify(msg));
-      setTimeout(() => {
-        if (waiting.has(id)) {
-          waiting.delete(id);
-          console.warn('[morse] no reply to', msg);
-          resolve(null);
-        }
-      }, 3000);
+    const msg = Object.assign({}, obj, { id: 'r' + (nextId++) });
+    return post(msg).then((reply) => {
+      if (reply) console.log('[morse] reply', reply);
+      else console.warn('[morse] no reply to', msg);
+      return reply;
     });
   }
 
+  function onBroadcast(msg) {
+    if (msg.type === 'state') onState(msg);
+  }
+
+  function onState(s) {
+    board = s;
+    freshLink = false;
+    applyBoardLed();
+    render();
+  }
+
+  function renderStatus() {
+    if (!connected) return;   // connect() and scheduleReconnect() say what the link is doing
+    if (!board) { setStatus('ok', 'Connected', 'Waiting for the board to say hello'); return; }
+    const n = board.clients;
+    const others = (typeof n === 'number' && n > 1) ? ` · ${n} phones on the network` : '';
+    setStatus('ok', 'Connected',
+              `Board ${sending() ? 'sending' : 'idle'} · firmware ${board.fw || '?'}${others}`);
+  }
+
+  function render() {
+    renderStatus();
+    renderLed();
+  }
+
+  // ---- The LED panel (SPEC.md section 9) ----
+
+  const ledColor = $('ledColor'), ledBri = $('ledBri'), ledBriOut = $('ledBriOut'),
+        swatch = $('swatch'), ledAdviceEl = $('ledAdvice'), ledLum = $('ledLum'),
+        ledLock = $('ledLock'), ledErr = $('ledErr'), presetBtn = $('preset');
+
+  const KEY_LED = 'esp32-morse.led';
+  // What test 2 is filmed with, and what the board boots with (firmware src/led.h).
+  const FILMING = { r: 0, g: 255, b: 0, brightness: 20 };
+  const LED_EVERY_MS = 100;   // at most one `led` per this while dragging
+  const HANDS_OFF_MS = 800;   // a control touched this recently is still under a finger
+
+  let ledTimer = null;
+  let ledSentAt = 0;
+  let ledLastSent = '';
+  let ledTouchedAt = 0;
+  let boardLedTimer = null;
+
+  const byte = (n) => Number.isInteger(n) && n >= 0 && n <= 255;
+  function validLed(l) {
+    return !!l && byte(l.r) && byte(l.g) && byte(l.b) &&
+           Number.isInteger(l.brightness) && l.brightness >= 0 && l.brightness <= 100;
+  }
+  const hex2 = (n) => n.toString(16).padStart(2, '0');
+  function ledFromControls() {
+    const n = parseInt(ledColor.value.slice(1), 16) || 0;
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, brightness: +ledBri.value };
+  }
+  function setLedControls(l) {
+    ledColor.value = '#' + hex2(l.r) + hex2(l.g) + hex2(l.b);
+    ledBri.value = String(l.brightness);
+    renderLed();
+  }
+
+  // Perceived luminance (Rec. 709 weights) scaled by brightness, 0 to 1. The warnings come
+  // from this estimate, not from a list of bad colours (SPEC.md section 9).
+  function luminance(l) {
+    return (0.2126 * l.r + 0.7152 * l.g + 0.0722 * l.b) / 255 * l.brightness / 100;
+  }
+
+  function ledAdvice(l) {
+    const L = luminance(l);
+    if ((l.r === 0 && l.g === 0 && l.b === 0) || l.brightness === 0) {
+      return { cls: 'bad', text: 'The LED will not light at all.' };
+    }
+    if (L < 0.02) {
+      const blue = l.b > l.r && l.b > l.g;
+      return { cls: 'bad', text: 'Hard to see and hard to film. ' +
+        (blue ? 'Blue is the weakest channel: raise the brightness or add green.'
+              : 'Raise the brightness.') };
+    }
+    if (L < 0.05) {
+      return { cls: 'warn', text: 'May be hard to film: a 240 fps frame is a short exposure, ' +
+        'so the camera raises its gain and the edges get noisy.' };
+    }
+    if (L > 0.30) {
+      return { cls: 'warn', text: 'Likely to bloom on camera, smearing the edge of a dot ' +
+        'across extra frames. Bad for test 2.' };
+    }
+    return { cls: 'ok', text: 'Easy to see and to film.' };
+  }
+
+  function renderLed() {
+    const l = ledFromControls();
+    ledBriOut.textContent = l.brightness + '%';
+    const k = l.brightness / 100;
+    swatch.style.background =
+      `rgb(${Math.round(l.r * k)}, ${Math.round(l.g * k)}, ${Math.round(l.b * k)})`;
+    const a = ledAdvice(l);
+    ledAdviceEl.className = 'advice ' + a.cls;
+    ledAdviceEl.textContent = a.text;
+    ledLum.textContent = `Perceived luminance ${luminance(l).toFixed(3)} (0 dark, 1 full white).`;
+
+    const allowed = ledAllowed();
+    ledColor.disabled = ledBri.disabled = presetBtn.disabled = !allowed;
+    ledLock.hidden = !(connected && sending());
+  }
+
+  // `led` is refused mid-transmission (SPEC.md section 9.1), so only ask when idle.
+  function ledAllowed() { return connected && !!board && !sending(); }
+
+  function sendLed(force) {
+    if (!ledAllowed()) return;
+    const l = ledFromControls();
+    const key = JSON.stringify(l);
+    if (!force && key === ledLastSent) return;
+    ledLastSent = key;
+    ledSentAt = Date.now();
+    request(Object.assign({ cmd: 'led' }, l)).then((reply) => {
+      if (!reply) ledErr.textContent = connected ? 'The board did not answer.' : '';
+      else ledErr.textContent = reply.ok ? '' : 'The board refused it: ' + reply.error + '.';
+    });
+  }
+
+  // Live while dragging, but at most one frame per LED_EVERY_MS. The timer reads the controls
+  // when it fires, so the value that goes out is always the newest one.
+  function throttleLed() {
+    if (ledTimer) return;
+    const wait = Math.max(0, LED_EVERY_MS - (Date.now() - ledSentAt));
+    ledTimer = setTimeout(() => { ledTimer = null; sendLed(false); }, wait);
+  }
+  // The final value always goes out, whatever the throttle was doing.
+  function flushLed(force) {
+    if (ledTimer) { clearTimeout(ledTimer); ledTimer = null; }
+    sendLed(force);
+  }
+
+  function onLedInput() {
+    ledTouchedAt = Date.now();
+    renderLed();
+    throttleLed();
+  }
+  // Saved on change, not per frame: storage is for seeding, not for the drag.
+  function onLedChange() {
+    ledTouchedAt = Date.now();
+    renderLed();
+    save(KEY_LED, ledFromControls());
+    flushLed(false);
+  }
+  ledColor.addEventListener('input', onLedInput);
+  ledColor.addEventListener('change', onLedChange);
+  ledBri.addEventListener('input', onLedInput);
+  ledBri.addEventListener('change', onLedChange);
+
+  presetBtn.addEventListener('click', () => {
+    ledTouchedAt = Date.now();
+    setLedControls(FILMING);
+    save(KEY_LED, FILMING);
+    flushLed(true);   // even if unchanged: tapping it again should show the preview again
+  });
+
+  // `state` carries what the LED is actually set to, and that wins over this phone's memory
+  // (SPEC.md section 9), except on a control still under a finger: that one takes the
+  // board's value once it has been still for HANDS_OFF_MS, rather than fighting the drag.
+  function applyBoardLed() {
+    clearTimeout(boardLedTimer);
+    if (!board || !validLed(board.led)) return;
+    const idle = Date.now() - ledTouchedAt;
+    if (idle < HANDS_OFF_MS || ledTimer) {
+      boardLedTimer = setTimeout(applyBoardLed, Math.max(50, HANDS_OFF_MS - idle));
+      return;
+    }
+    setLedControls(board.led);
+    ledLastSent = JSON.stringify(ledFromControls());
+  }
+
+  const seeded = load(KEY_LED);
+  setLedControls(validLed(seeded) ? seeded : FILMING);
+
   window.morse = { raw };
+  render();
   connect();
 })();
 </script>
