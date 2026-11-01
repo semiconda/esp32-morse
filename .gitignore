@@ -2,3 +2,10 @@
 .vscode/
 firmware/include/secrets.h
 __pycache__/
+
+# Working documents for Claude - local only, never pushed
+VISION.md
+SPEC.md
+PLAN.md
+handover.md
+notes.md
