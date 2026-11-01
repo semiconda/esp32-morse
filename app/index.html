@@ -9,7 +9,7 @@
   No external resources of any kind. There is no internet on the board's network, so a CDN
   or a web font is not a slow load, it is a guaranteed failure.
 
-  The app holds no Morse table (SPEC.md section 5). It sends the text as typed and renders
+  The app holds no Morse table. It sends the text as typed and renders
   what the board answers: the normalised message, the codes, the unsupported positions.
 -->
 <html lang="en">
@@ -108,7 +108,7 @@
     border-radius: 10px; border: 1px solid var(--line); background: #20262c; color: var(--text); }
   button:disabled { opacity: .38; }
 
-  /* The LED panel (SPEC.md section 9). */
+  /* The LED panel. */
   .ledrow { display: flex; align-items: center; gap: 12px; }
   .grow { flex: 1 1 auto; min-width: 0; }
   input[type=color] { -webkit-appearance: none; appearance: none;
@@ -124,7 +124,7 @@
   .advice.ok   { color: var(--ok); }
   #preset { margin: 4px 0 6px; }
 
-  /* The message, its preview and the controls (SPEC.md sections 3, 4). */
+  /* The message, its preview and the controls. */
   /* 16px or more, or iOS Safari zooms the page when the box takes focus. */
   textarea { width: 100%; font: 16px/1.4 var(--mono); background: var(--well); color: var(--text);
     border: 1px solid var(--line); border-radius: 10px; padding: 10px; resize: vertical; }
@@ -157,7 +157,7 @@
     text-overflow: ellipsis; }
   #sendErr { margin-top: 8px; }
 
-  /* The live display (SPEC.md section 4.1). No transitions anywhere here: an animation
+  /* The live display. No transitions anywhere here: an animation
      would add its own delay on top of the link's, and at 40 WPM an element is only 30 ms. */
   .live.stale { opacity: .45; }
   .live-msg { font-family: var(--mono); font-size: .95rem; line-height: 1.8;
@@ -283,8 +283,8 @@
 
   const sending = () => !!board && board.state === 'sending';
 
-  // Browser storage only seeds the controls before the first `state` (SPEC.md sections 4,
-  // 9). It may be missing or throw (private browsing), and the app must work without it.
+  // Browser storage only seeds the controls before the first `state`. It may be missing or
+  // throw (private browsing), and the app must work without it.
   function load(key) {
     try { const v = localStorage.getItem(key); return v === null ? null : JSON.parse(v); }
     catch (e) { return null; }
@@ -371,7 +371,7 @@
     render();
   }
 
-  // One request, exactly one reply, matched by id (SPEC.md section 6.3). Resolves with the
+  // One request, exactly one reply, matched by id. Resolves with the
   // reply, or with null if the link is down or the board does not answer within 3 s.
   function post(msg) {
     return new Promise((resolve) => {
@@ -386,7 +386,7 @@
     });
   }
 
-  // The board drops a frame over this many bytes without a reply (SPEC.md section 6.3), so
+  // The board drops a frame over this many bytes without a reply, so
   // sending one would only look, 3 s later, like a board that has stopped answering.
   const MAX_FRAME_BYTES = 4096;
 
@@ -459,7 +459,7 @@
     renderLive();
   }
 
-  // ---- The LED panel (SPEC.md section 9) ----
+  // ---- The LED panel ----
 
   const ledColor = $('ledColor'), ledBri = $('ledBri'), ledBriOut = $('ledBriOut'),
         swatch = $('swatch'), ledAdviceEl = $('ledAdvice'), ledLum = $('ledLum'),
@@ -494,7 +494,7 @@
   }
 
   // Perceived luminance (Rec. 709 weights) scaled by brightness, 0 to 1. The warnings come
-  // from this estimate, not from a list of bad colours (SPEC.md section 9).
+  // from this estimate, not from a list of bad colours.
   function luminance(l) {
     return (0.2126 * l.r + 0.7152 * l.g + 0.0722 * l.b) / 255 * l.brightness / 100;
   }
@@ -537,7 +537,7 @@
     ledLock.hidden = !(connected && sending());
   }
 
-  // `led` is refused mid-transmission (SPEC.md section 9.1), so only ask when idle.
+  // `led` is refused mid-transmission, so only ask when idle.
   function ledAllowed() { return connected && !!board && !sending(); }
 
   function sendLed(force) {
@@ -591,7 +591,7 @@
   });
 
   // `state` carries what the LED is actually set to, and that wins over this phone's memory
-  // (SPEC.md section 9), except on a control still under a finger: that one takes the
+  //, except on a control still under a finger: that one takes the
   // board's value once it has been still for HANDS_OFF_MS, rather than fighting the drag.
   function applyBoardLed() {
     clearTimeout(boardLedTimer);
@@ -608,7 +608,7 @@
   const seeded = load(KEY_LED);
   setLedControls(validLed(seeded) ? seeded : FILMING);
 
-  // ---- The message, the preview and the controls (SPEC.md sections 3, 4, 6.3) ----
+  // ---- The message, the preview and the controls ----
 
   const msgEl = $('msg'), countEl = $('count'), pvBox = $('pvBox'), pv = $('pv'),
         checkErr = $('checkErr'), durEl = $('dur'), pvNote = $('pvNote'), wpmEl = $('wpm'),
@@ -616,7 +616,7 @@
         sendErr = $('sendErr'), pill = $('pill');
 
   const KEY_WPM = 'esp32-morse.wpm';
-  const MAX_CHARS = 255;      // after normalisation, in code points (SPEC.md section 3.1)
+  const MAX_CHARS = 255;      // after normalisation, in code points
   const CHECK_AFTER_MS = 250; // typing pause before asking the board
 
   let check = null;           // { text, reply }: the last `check` answer and the text it was for
@@ -639,7 +639,7 @@
   }
 
   // A duration needs a speed, so the board sends units and the app does the arithmetic
-  // (SPEC.md section 6.3): units x 1200 / wpm milliseconds.
+  //: units x 1200 / wpm milliseconds.
   const seconds = (units, w, places) => (units * 1200 / w / 1000).toFixed(places);
   function fmtDot(w) {
     const ms = 1200 / w;
@@ -647,7 +647,7 @@
   }
 
   // Characters the user cannot see must still be visible where they are: a newline, a tab,
-  // the U+00A0 that iOS inserts on its own (SPEC.md section 3.1). Named ones get a symbol,
+  // the U+00A0 that iOS inserts on its own. Named ones get a symbol,
   // the rest their code point.
   const NAMED = {
     '\t': ['⇥', 'tab'], '\n': ['⏎', 'newline'], '\r': ['␍', 'carriage return'],
@@ -667,7 +667,7 @@
   const pretty = (code) => (code || '').replace(/\./g, '·').replace(/-/g, '–');
 
   // The preview is the board's normalised string, not the text box, so the board's positions
-  // need no translation (SPEC.md section 3.2). Indexed by code point, never with norm[i]:
+  // need no translation. Indexed by code point, never with norm[i]:
   // an emoji is one position.
   function buildPreview() {
     pv.textContent = '';
@@ -773,7 +773,7 @@
     sendPending = true;
     sendErr.textContent = '';
     render();
-    // The board revalidates everything from scratch (SPEC.md section 6.3); the check that
+    // The board revalidates everything from scratch; the check that
     // enabled this button is a courtesy, not a guarantee.
     request({ cmd: 'send', text, wpm: wpm() }).then((reply) => {
       sendPending = false;
@@ -795,7 +795,7 @@
   });
 
   // Resend means the board's last accepted message, at the speed the slider shows now
-  // (SPEC.md section 4). The button carries that text so it is never a surprise.
+  //. The button carries that text so it is never a surprise.
   resendBtn.addEventListener('click', () => {
     if (resendBtn.disabled) return;
     resendPending = true;
@@ -809,7 +809,7 @@
   });
 
   // Stop does not set idle itself: the board says idle once the transmitter has actually
-  // let go (SPEC.md section 6.3), and only that `state` re-enables anything.
+  // let go, and only that `state` re-enables anything.
   stopBtn.addEventListener('click', () => {
     if (stopBtn.disabled) return;
     stopPending = true;
@@ -824,7 +824,7 @@
     const isFresh = fresh();
     const r = check && check.reply;
 
-    // The limit applies after normalisation (SPEC.md section 3.1), which only the board does:
+    // The limit applies after normalisation, which only the board does:
     // trailing or doubled spaces can make the box far longer than the message. So the count
     // is the board's once the check is fresh, and until then the box's, marked as unchecked.
     let counted = null;
@@ -873,7 +873,7 @@
     wpmEl.value = String(seededWpm);
   }
 
-  // ---- The live display (SPEC.md section 4.1), driven by `elem` from the board ----
+  // ---- The live display, driven by `elem` from the board ----
 
   const live = $('live'), liveMsg = $('liveMsg'), bigChar = $('bigChar'), elsEl = $('els'),
         liveRow = $('liveRow'), ledInd = $('ledInd'), liveNote = $('liveNote'), liveFast = $('liveFast'),
@@ -972,7 +972,7 @@
   }
 
   // Each `elem` fully describes the display, so only the newest one in a frame needs
-  // painting. Gaps keep the character (SPEC.md section 6.3): `gap_char` and `gap_word`
+  // painting. Gaps keep the character: `gap_char` and `gap_word`
   // carry the character that has just finished, and it stays until the next dot or dash.
   function paint() {
     frameQueued = false;
