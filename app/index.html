@@ -196,7 +196,7 @@
 
   function scheduleReconnect() {
     setStatus('bad', 'Not connected',
-              'Join the WiFi network esp32-morse, then open http://192.168.4.1');
+              'Join the WiFi esp32-morse (password: instrument), then open http://192.168.4.1');
     setTimeout(connect, backoff);
     backoff = Math.min(backoff * 2, 5000);
   }

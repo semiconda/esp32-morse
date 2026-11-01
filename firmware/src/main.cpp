@@ -27,10 +27,16 @@
 // Network
 // ---------------------------------------------------------------------------------------
 
-// Open, by design: there is no secret in this project, the repository is public, and a
-// WPA2 passphrase would have to live in it. Anyone in range can join and blink the LED.
-// SPEC.md section 6.1.
+// SPEC.md section 6.1. WPA2, with a passphrase that is published rather than secret: it is
+// in this file, in the README and in the public repository, so it protects nothing against
+// anyone who reads them. What it does do is stop a passer-by joining by accident, and keep
+// the phone from nagging about an open network.
+//
+// It is NOT a credential and nothing in this project is protected by it. A real secret would
+// belong in include/secrets.h, which is git-ignored — this one is deliberately not there,
+// because hiding it would imply it mattered.
 static const char* kApSsid = "esp32-morse";
+static const char* kApPassword = "instrument";   // 10 chars; WPA2 needs at least 8
 
 // The ESP32's default access-point limit, stated rather than left to be discovered when a
 // fifth phone cannot join (SPEC.md section 4).
@@ -61,6 +67,9 @@ static const size_t kMaxFrameBytes = 4096;
 
 static uint32_t lastTickMs = 0;
 static const uint32_t kTickMs = 50;
+
+static uint32_t lastHeartbeatMs = 0;
+static const uint32_t kHeartbeatMs = 10000;
 
 // ---------------------------------------------------------------------------------------
 // Outgoing
@@ -170,11 +179,11 @@ static void onWsEvent(AsyncWebSocket* /*s*/, AsyncWebSocketClient* client, AwsEv
 
 static void startWiFi() {
   WiFi.mode(WIFI_AP);
-  // One argument for the passphrase would make it WPA2; NULL is an open network.
-  WiFi.softAP(kApSsid, /*passphrase*/ nullptr, /*channel*/ 1, /*hidden*/ 0, kApMaxClients);
-  Serial.printf("[wifi] open AP \"%s\"  http://%s/\n", kApSsid,
+  // A passphrase shorter than 8 characters silently falls back to an open network on some
+  // cores, which would be a quiet way to lose the setting. "instrument" is 10.
+  WiFi.softAP(kApSsid, kApPassword, /*channel*/ 1, /*hidden*/ 0, kApMaxClients);
+  Serial.printf("[wifi] AP \"%s\" password \"%s\"  http://%s/\n", kApSsid, kApPassword,
                 WiFi.softAPIP().toString().c_str());
-  Serial.println("[wifi] the network is open: anyone in range can join");
 }
 
 static void startServer() {
@@ -221,5 +230,16 @@ void loop() {
     // Mandatory with ESPAsyncWebServer: without it, dead clients accumulate and eventually
     // exhaust AsyncTCP.
     ws.cleanupClients();
+  }
+
+  // A heartbeat, because a board that prints only at boot cannot be diagnosed: attach a
+  // monitor a second too late and it looks identical to a board that is dead. Ten seconds
+  // is often enough to answer "is the access point actually up?" without being noise.
+  if (now - lastHeartbeatMs >= kHeartbeatMs) {
+    lastHeartbeatMs = now;
+    Serial.printf("[status] up %lus  AP \"%s\" on %s  stations=%u  ws=%u\n",
+                  (unsigned long)(now / 1000), kApSsid,
+                  WiFi.softAPIP().toString().c_str(),
+                  WiFi.softAPgetStationNum(), ws.count());
   }
 }
