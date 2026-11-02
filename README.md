@@ -8,7 +8,8 @@ the timing.
 
 - `firmware/` — PlatformIO project (Arduino, ESP32-S3)
 - `app/` — the app: the page the board serves to the phone
-- `index.html` — the project website, at the repository root (not written yet)
+- `index.html` — the project website, served by GitHub Pages at
+  https://semiconda.github.io/esp32-morse/
 
 ## What you need
 
