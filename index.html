@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<!--
+  esp32-morse — the project website.
+
+  This page presents the project; it is not the app. The app is app/index.html and runs only
+  when the board serves it, over the board's own WiFi.
+
+  Plain HTML, CSS and a little JavaScript, no build step and no external resources. The
+  colours are the app's, so the two read as one project.
+
+  The "measured" column of the verification table is filled in as the measurements are taken.
+  Pictures and video go in media/.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="An ESP32-S3 that sends your message as Morse code on its LED, timed to the microsecond, and how that timing was checked with a stopwatch and a slow-motion camera.">
+<title>esp32-morse</title>
+<style>
+  /* The app's palette: walnut, brass, paper tape. Dark is the default. */
+  :root {
+    color-scheme: dark;
+    --bg: #15100c;
+    --bg-top: #261b12;
+    --panel: #221a13;
+    --panel-2: #1c150f;
+    --line: #3e3125;
+    --edge: #8c7558;
+    --well: #110c08;
+    --text: #f3e9d6;
+    --dim: #b9a98f;
+    --ok: #93d48b;
+    --warn: #f2c35b;
+    --focus: #e0b85e;
+    --link: #f0cf7e;
+    --btn: #2e231a;
+    --btn-ink: #f3e9d6;
+    --btn-depth: #0b0805;
+    --mark-off: #846e51;
+    --mark-on: #ffd36b;
+    --hole: #1c150f;
+    --brass-ui: #b88f3e;
+    --wood-edge: #2b190c;
+    --paper-edge: #0b0805;
+    --glass: #2c241d;
+    --shadow: 0 1px 0 #ffffff0a inset, 0 6px 18px #00000059;
+    /* the same in both schemes: paper is paper, brass is brass */
+    --plate-a: #e8cc85;
+    --plate-b: #b88f3e;
+    --plate-ink: #2a1c0b;
+    --paper: #f2e8cc;
+    --ink: #251a10;
+    --ink-dim: #645239;
+    --ink-lit: #8a5a00;
+    --stamp: #9a2a1d;
+    --lamp: #00ff00;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg: #ece2cc;
+      --bg-top: #f6efe0;
+      --panel: #fbf7ee;
+      --panel-2: #f4ecdb;
+      --line: #d5c4a2;
+      --edge: #8a7455;
+      --well: #fffdf8;
+      --text: #271c12;
+      --dim: #5d4d3a;
+      --ok: #2c672c;
+      --warn: #855000;
+      --focus: #7a5512;
+      --link: #7a4f0a;
+      --btn: #efe5d1;
+      --btn-ink: #271c12;
+      --btn-depth: #c9b791;
+      --mark-off: #8a7455;
+      --mark-on: #b97300;
+      --hole: #cdbb98;
+      --brass-ui: #8a6416;
+      --paper-edge: #8f7a58;
+      --shadow: 0 1px 0 #ffffffb3 inset, 0 4px 14px #5a3c1426;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg) linear-gradient(var(--bg-top), var(--bg) 480px) no-repeat;
+    color: var(--text);
+    font: 17px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  a { color: var(--link); text-underline-offset: 2px; }
+  code { font: .88em var(--mono); background: var(--well); border: 1px solid var(--line);
+    border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+  pre { font: .85rem/1.5 var(--mono); background: var(--well); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 0 0 14px; }
+  p { margin: 0 0 14px; }
+  ul, ol { margin: 0 0 14px; padding-left: 1.3em; }
+  li { margin-bottom: 6px; }
+  strong { font-weight: 650; }
+  .dim { color: var(--dim); }
+  .small { font-size: .85rem; }
+
+  /* The masthead: the name, and MORSE in Morse beneath it. */
+  .mast { text-align: center; margin: 28px 0 22px; }
+  h1 { font: 600 2.3rem/1.1 var(--serif); font-variant: small-caps; letter-spacing: .08em; margin: 0; }
+  .orn { display: flex; align-items: flex-start; justify-content: center; gap: 16px; margin: 14px 0 14px; }
+  .orn::before, .orn::after { content: ""; flex: 0 1 70px; height: 1px; margin-top: 3px; }
+  .orn::before { background: linear-gradient(90deg, transparent, var(--brass-ui)); }
+  .orn::after  { background: linear-gradient(90deg, var(--brass-ui), transparent); }
+  .og { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .sig { display: flex; gap: 4px; }
+  .sig i { display: block; width: 6px; height: 6px; border-radius: 3px; background: var(--brass-ui); }
+  .sig i.h { width: 18px; }
+  .og b { font: 600 .66rem/1 var(--serif); letter-spacing: .1em; color: var(--dim); }
+  .lede { font: 1.2rem/1.45 var(--serif); max-width: 34em; margin: 0 auto 12px; }
+  .by { color: var(--dim); font-size: .9rem; }
+  .links { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .btn { display: inline-block; font: inherit; font-size: .95rem; min-height: 44px; padding: 10px 16px;
+    border-radius: 8px; border: 1px solid var(--edge); background: var(--btn); color: var(--btn-ink);
+    text-decoration: none; cursor: pointer;
+    box-shadow: inset 0 1px 0 #ffffff14, 0 2px 0 var(--btn-depth); }
+  .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #ffffff14, 0 1px 0 var(--btn-depth); }
+  .btn.primary { background: linear-gradient(var(--plate-a), var(--plate-b)); border-color: #e9cd85;
+    color: var(--plate-ink); font-weight: 700; }
+
+  /* Sections: a walnut board with four brass screws and an engraved brass nameplate. */
+  section {
+    position: relative;
+    background: linear-gradient(var(--panel), var(--panel-2));
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 20px 8px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+  }
+  section::before {
+    content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    pointer-events: none; border-radius: inherit;
+    background:
+      radial-gradient(circle at 8px 8px, var(--brass-ui) 2.2px, transparent 2.8px),
+      radial-gradient(circle at calc(100% - 8px) 8px, var(--brass-ui) 2.2px, transparent 2.8px),
+      radial-gradient(circle at 8px calc(100% - 8px), var(--brass-ui) 2.2px, transparent 2.8px),
+      radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), var(--brass-ui) 2.2px, transparent 2.8px);
+  }
+  h2 {
+    display: inline-block;
+    margin: 0 0 14px;
+    padding: 3px 14px 2px;
+    font: 700 .95rem/1.35 var(--serif);
+    text-transform: lowercase;
+    font-variant: small-caps;
+    letter-spacing: .18em;
+    color: var(--plate-ink);
+    background: linear-gradient(var(--plate-a), var(--plate-b));
+    border-radius: 3px;
+    box-shadow: inset 0 1px 0 #fff3cf99, inset 0 -1px 0 #5a3d0e66, 0 1px 2px #00000059;
+    text-shadow: 0 1px 0 #f7e2a880;
+  }
+  h3 { font: 600 1.08rem/1.3 var(--serif); margin: 20px 0 8px; letter-spacing: .02em; }
+
+  /* Paper tape: the timing diagram is drawn on it. */
+  .tape { position: relative; background: var(--paper); color: var(--ink);
+    border: 1px solid var(--paper-edge); border-radius: 3px; padding: 18px 12px 10px;
+    box-shadow: 0 2px 6px #00000040; margin: 0 0 14px; }
+  .tape::before { content: ""; position: absolute; left: 6px; right: 6px; top: 4px; height: 6px;
+    background: radial-gradient(circle, var(--hole) 2px, transparent 2.6px) 0 0 / 12px 6px repeat-x; }
+  .tape svg { display: block; width: 100%; height: auto; }
+  .t-on { fill: var(--ink); }
+  .t-on.lit { fill: var(--ink-lit); }
+  .t-off { fill: none; stroke: var(--ink-dim); stroke-width: .6; stroke-dasharray: 2 2; }
+  .t-ch { font: 700 22px var(--mono); fill: var(--ink); text-anchor: middle; }
+  .t-ch.cur { fill: var(--stamp); }
+  .t-tick { stroke: var(--ink-dim); stroke-width: 1; }
+  .t-num { font: 14px var(--mono); fill: var(--ink-dim); text-anchor: middle; }
+  .t-gap { font: 14px var(--mono); fill: var(--ink-dim); text-anchor: middle; }
+  .t-cursor { stroke: var(--stamp); stroke-width: 2; }
+
+  /* The demo: a lamp in a brass bezel, and the controls under it. */
+  .demo { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .lampbox { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .lampbox b { font: 700 .66rem/1 var(--serif); letter-spacing: .16em; color: var(--dim); }
+  .lamp { width: 56px; height: 56px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ffffff2e, transparent 45%), var(--glass);
+    border: 6px solid var(--brass-ui); box-shadow: 0 0 0 1px var(--wood-edge), inset 0 2px 6px #000000a0; }
+  .lamp.on { background: radial-gradient(circle at 35% 30%, #ffffffc0, transparent 55%), var(--lamp);
+    box-shadow: 0 0 0 1px var(--wood-edge), 0 0 26px 6px var(--lamp); }
+  .ctl { flex: 1 1 240px; min-width: 0; }
+  .lbl { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 12px;
+    font-size: .88rem; color: var(--dim); }
+  .lbl span { color: var(--text); font-family: var(--mono); font-size: .82rem; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; margin: 6px 0 10px; accent-color: var(--focus); }
+
+  /* Tables scroll inside their own box, never the page. */
+  .tw { overflow-x: auto; margin: 0 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--well); }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  th { font: 700 .78rem/1.3 var(--serif); letter-spacing: .05em; color: var(--dim); white-space: nowrap; }
+  td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  span.n { font-family: var(--mono); font-size: .8rem; }
+  .pending { color: var(--dim); font-style: italic; }
+  .pass { color: var(--ok); font-weight: 700; }
+
+  .eq { font: 1.15rem/1.4 var(--mono); text-align: center; padding: 12px; margin: 0 0 14px;
+    background: var(--well); border: 1px solid var(--line); border-radius: 8px; }
+  .callout { padding: 10px 14px; background: var(--well); border-left: 3px solid var(--warn);
+    border-radius: 0 8px 8px 0; margin: 0 0 14px; }
+
+  /* The signal path, drawn as boxes. */
+  .flow { display: grid; gap: 6px; margin: 0 0 14px; }
+  .flow div { background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: .9rem; }
+  .flow div b { font-family: var(--serif); }
+  .flow .arr { border: none; background: none; padding: 0; text-align: center; color: var(--brass-ui); line-height: 1; }
+
+  footer { text-align: center; color: var(--dim); font-size: .85rem; margin: 26px 0 30px; }
+  footer .orn { margin: 0 0 10px; }
+
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    h1 { font-size: 1.9rem; }
+    section { padding: 16px 14px 4px; }
+    pre { font-size: .78rem; padding: 10px 12px; }
+    th, td { padding: 7px 8px; }
+    th { white-space: normal; }
+    .orn { gap: 10px; }
+    .orn::before, .orn::after { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <h1>esp32-morse</h1>
+  <!-- MORSE in Morse: -- --- .-. ... . -->
+  <div class="orn" aria-hidden="true">
+    <span class="og"><span class="sig"><i class="h"></i><i class="h"></i></span><b>M</b></span>
+    <span class="og"><span class="sig"><i class="h"></i><i class="h"></i><i class="h"></i></span><b>O</b></span>
+    <span class="og"><span class="sig"><i></i><i class="h"></i><i></i></span><b>R</b></span>
+    <span class="og"><span class="sig"><i></i><i></i><i></i></span><b>S</b></span>
+    <span class="og"><span class="sig"><i></i></span><b>E</b></span>
+  </div>
+  <p class="lede">Type a message on your phone. An ESP32-S3 sends it as Morse code on its LED,
+    timed to the microsecond, then reports how long it took.</p>
+  <div class="by">by <a href="https://github.com/semiconda">semiconda</a></div>
+  <div class="links">
+    <a class="btn primary" href="https://github.com/semiconda/esp32-morse">Code on GitHub</a>
+    <a class="btn" href="#verified">What was verified</a>
+  </div>
+</header>
+
+<section id="what">
+  <h2>What it is</h2>
+  <p>A small instrument with one job: to blink Morse code with timing you can predict on paper and
+    then check. The board runs its own WiFi network and serves the app to your phone, so nothing
+    is installed and no internet is involved. The phone chooses the message and the speed; the
+    board does all the timing.</p>
+  <p>Why Morse? Its timing is defined exactly, by one unit, so every transmission comes with a
+    prediction. Ten copies of the word PARIS at 10 words per minute must take <strong>59.16
+    seconds</strong>, not 60, and the reason for the missing 0.84 s is a rule that is easy to get
+    wrong. The point of the project is to make that prediction and test it with a stopwatch and a
+    phone camera, not an oscilloscope.</p>
+  <p class="dim small">The app itself runs only on the board, so there is no live link to it here.
+    Below is an in-browser imitation of the LED, timed the same way.</p>
+</section>
+
+<section id="demo">
+  <h2>PARIS, blinking</h2>
+  <p>The reference word, as the board sends it, drawn to scale: a dot is one unit, a dash three,
+    and the dotted line is the dark between them. The lamp is lit exactly while the cursor crosses
+    a mark. Your browser is doing the timing here, not the board.</p>
+  <div class="tape"><svg id="tape" role="img" aria-label="Timing diagram of PARIS: 50 units, with the dots, dashes and gaps drawn to scale"></svg></div>
+  <div class="demo">
+    <div class="lampbox"><div class="lamp" id="lamp"></div><b>LED</b></div>
+    <div class="ctl">
+      <label class="lbl" for="wpm">Speed <span id="wpmOut"></span></label>
+      <input type="range" id="wpm" min="5" max="40" step="1" value="10">
+      <button class="btn" id="play">Play</button>
+    </div>
+  </div>
+</section>
+
+<section id="use">
+  <h2>How to use it</h2>
+  <ol>
+    <li>Power the board from any USB port or charger.</li>
+    <li>On your phone, join the WiFi network <strong><code>esp32-morse</code></strong>, password
+      <strong><code>instrument</code></strong>. The password is published on purpose and
+      protects nothing; it only stops a passer-by joining by accident. If the phone warns that
+      the network has no internet, stay connected.</li>
+    <li>Open <strong><code>http://192.168.4.1</code></strong>, typing the <code>http://</code>.
+      There is no friendly name, only this address (see <a href="#why-no-name">why</a>).</li>
+    <li>Type a message, choose a speed between 5 and 40 words per minute, and press
+      <strong>Send</strong>.</li>
+  </ol>
+  <h3>What the app does</h3>
+  <ul>
+    <li><strong>The board checks every character as you type.</strong> It accepts A–Z (lower case is
+      upper-cased), 0–9, space and <code>. , ? ' ! / ( ) &amp; : ; = + - _ " $ @</code>, up to 255
+      characters. Anything else is highlighted where it is, and Send stays disabled until it is
+      gone. Nothing is silently dropped.</li>
+    <li><strong>A live display</strong> follows the transmission at three levels: the whole message
+      with the current word marked, the current character, and its dots and dashes with the one
+      being sent lit.</li>
+    <li><strong>The board's own time.</strong> When a transmission finishes, the app shows how long
+      it took by the board's clock, next to the prediction.</li>
+    <li><strong>Stop</strong> ends a transmission within one element, even in the middle of a long
+      word gap. The message stays in the box, so pressing Send again repeats it.</li>
+    <li><strong>An LED panel</strong> sets the colour and brightness, and warns when a setting will
+      be hard to see or film. The <em>filming preset</em>, green at 20%, is the setting used for
+      the slow-motion test, so that measurement can be repeated with identical conditions.</li>
+    <li>Up to four phones can connect at once. They all see the same transmission, and any of
+      them can stop it.</li>
+  </ul>
+</section>
+
+<section id="timing">
+  <h2>How the timing works</h2>
+  <p>Everything is a whole number of one unit, the dot:</p>
+  <div class="tw"><table>
+    <tr><th>element</th><th>length</th></tr>
+    <tr><td>dot</td><td class="n">1 unit</td></tr>
+    <tr><td>dash</td><td class="n">3 units</td></tr>
+    <tr><td>gap between the dots and dashes of one character</td><td class="n">1 unit</td></tr>
+    <tr><td>gap between characters</td><td class="n">3 units</td></tr>
+    <tr><td>gap between words</td><td class="n">7 units</td></tr>
+  </table></div>
+  <p>Speed is defined by the word PARIS, which is exactly 50 units including the word gap after
+    it. <em>W</em> words per minute is 50<em>W</em> units in 60 seconds, so</p>
+  <div class="eq">dot (ms) = 1200 / WPM</div>
+  <p>At 20 WPM a dot is 60 ms and a dash 180 ms. At 40 WPM a dot is 30 ms; at 5 WPM, 240 ms.</p>
+
+  <h3>Why ten PARIS take 59.16 s, not 60</h3>
+  <p>PARIS is 50 units only if you count the word gap that follows it. A transmission ends with
+    its last dot and sends no gap after it. So ten copies are</p>
+  <pre>P A R I S     11+5+7+3+5 = 31
+4 letter gaps      4 × 3 = 12
+1 word gap after it      =  7
+one PARIS                = 50 units
+
+ten PARIS = 10 × 50 − 7  = 493 units
+10 WPM: 493 × 120 ms = 59.16 s
+ 5 WPM: 493 × 240 ms = 118.32 s</pre>
+  <p>The first version of this project's own plan predicted 60.0 s. The error was caught on paper,
+    before any code was written. A host test now pins the number at exactly 493.</p>
+
+  <h3>How the board keeps time</h3>
+  <ul>
+    <li><strong>Absolute deadlines.</strong> Each dot, dash and gap ends at a deadline measured from
+      the start of the transmission, using the chip's microsecond timer. Nothing is timed as "now
+      plus a delay", so a late edge never pushes the next one back, and errors cannot accumulate
+      over a long message.</li>
+    <li><strong>A task of its own.</strong> The transmitter runs as a separate, high-priority task on
+      the CPU core that is not handling WiFi. Between transmissions it sleeps and costs nothing.</li>
+    <li><strong>Integer microseconds.</strong> A dot is <code>1200000 / WPM</code> µs, computed with
+      no floating point. The rounding is worst at 38 WPM: 0.95 µs per unit, or 0.003% of a
+      transmission. At 5 and 10 WPM the division is exact.</li>
+    <li><strong>One gap function.</strong> The 1, 3 and 7 appear in exactly one function in the
+      firmware. Farnsworth timing, which stretches the gaps for learners, would change only that
+      function.</li>
+    <li><strong>A dark start.</strong> On Send, the LED goes dark for 200 ms before the first dot,
+      even if it was lit by a colour preview. The first edge is therefore always dark to lit,
+      which is what the stopwatch and the camera start from. Those 200 ms are not counted in the
+      reported time.</li>
+  </ul>
+
+  <h3>From the phone to the LED</h3>
+  <div class="flow" aria-label="The signal path">
+    <div><b>Phone</b> — the app, served by the board, talking over a WebSocket</div>
+    <div class="arr" aria-hidden="true">↓ message and speed &nbsp;·&nbsp; ↑ progress and the board's time</div>
+    <div><b>Main loop</b> — checks the request again, translates the whole message once, then hands it over</div>
+    <div class="arr" aria-hidden="true">↓ &nbsp;&nbsp;&nbsp; ↑ a queue of events</div>
+    <div><b>Transmitter task</b> — switches the LED at each deadline and records each element in the queue</div>
+    <div class="arr" aria-hidden="true">↓</div>
+    <div><b>LED</b> — the WS2812 on GPIO 48 that comes on the dev board; nothing else is wired</div>
+  </div>
+  <p>The transmitter never touches the network. It writes events into a 64-entry queue, about 3.4 s
+    of headroom at 40 WPM, and the main loop sends them on. If a phone falls behind, the phone
+    misses updates but the LED is never delayed. If the queue ever fills, the lost events are
+    counted and reported, so a lost event cannot pass for ordinary WiFi lag.</p>
+  <p><strong>The firmware does not trust the app.</strong> The app already blocks unsupported
+    characters and out-of-range speeds, but the board checks every request again. This matters:
+    a speed of 0 would reach <code>1200000 / WPM</code>, and a division by zero reboots the
+    chip. The same commands can be typed over the USB serial port, with no app involved, to
+    show that the firmware refuses them by itself.</p>
+
+  <h3 id="why-no-name">Why there is no name, only an address</h3>
+  <p>A board can try to answer for a name such as <code>esp32-morse.com</code> by running its own
+    DNS server, but modern phones often bypass it (Android's Private DNS, Chrome's DNS over HTTPS).
+    A name that works only sometimes is worse than an address that always does.</p>
+</section>
+
+<section id="verified">
+  <h2>What was verified</h2>
+  <p>The tests below need nothing but eyes, a phone stopwatch and a phone's slow-motion camera.
+    Each comes with a prediction made before the board was built.</p>
+
+  <h3>Checked automatically, on every build</h3>
+  <p><strong class="pass">76 of 76 pass.</strong> The Morse table, the message rules and the
+    timing arithmetic compile and run on an ordinary computer, with no board attached
+    (<code>pio test -e native</code>). They check:</p>
+  <ul>
+    <li>PARIS is exactly 50 units and ten PARIS exactly 493;</li>
+    <li>the digits follow their pattern rather than a copied list;</li>
+    <li>the letters most easily mistyped (<code>Q</code>, <code>Y</code>, <code>F</code>,
+      <code>L</code>) against their known codes;</li>
+    <li>that a speed of 0, 4 or 41 WPM, a missing speed or 20.5 WPM is refused;</li>
+    <li>the 255-character limit;</li>
+    <li>that an emoji is reported at the right position.</li>
+  </ul>
+  <p>The whole table of 54 characters was also compared with the international standard
+    (ITU-R M.1677-1) and agrees, 54 of 54. Five of the punctuation marks, <code>! &amp; ; _ $</code>,
+    are not in that standard; for those, the codes in common use are followed.</p>
+
+  <h3>Test 1 — PARIS, ten times</h3>
+  <p>Two instruments, each with a pass band set by what it can resolve:</p>
+  <ul>
+    <li><strong>The stopwatch: ±0.5%.</strong> Reaction time is about ±0.2 s at the start and again
+      at the end, so a thumb resolves roughly ±0.4% over a minute.</li>
+    <li><strong>The board's own reported time: ±0.2%.</strong> No thumb is involved, but the board
+      is timing itself with its own clock.</li>
+  </ul>
+  <div class="tw"><table>
+    <tr><th>run</th><th>predicted</th><th>pass if</th><th>measured</th></tr>
+    <tr><td>10 WPM<br><span class="dim">stopwatch</span></td><td class="n">59.16 s</td><td class="n">58.86 –<br>59.46 s</td><td class="pending">not yet measured</td></tr>
+    <tr><td>10 WPM<br><span class="dim">board</span></td><td class="n">59.16 s</td><td class="n">59.04 –<br>59.28 s</td><td class="pending">not yet measured</td></tr>
+    <tr><td>5 WPM<br><span class="dim">stopwatch</span></td><td class="n">118.32 s</td><td class="n">117.73 –<br>118.91 s</td><td class="pending">not yet measured</td></tr>
+    <tr><td>5 WPM<br><span class="dim">board</span></td><td class="n">118.32 s</td><td class="n">118.08 –<br>118.56 s</td><td class="pending">not yet measured</td></tr>
+    <tr><td>38 WPM<br><span class="dim">board</span></td><td class="n">15.568 s</td><td class="n">15.537 –<br>15.599 s</td><td class="pending">not yet measured</td></tr>
+  </table></div>
+  <p class="small dim">At 5 and 10 WPM the dot divides exactly into microseconds. 38 WPM is the
+    speed where rounding is largest, so that row tests it.</p>
+
+  <h3>Test 2 — slow motion</h3>
+  <p><code>PARIS PARIS</code> at 5 WPM, with the filming preset, filmed at 240 frames per second
+    and counted frame by frame. <strong>The ratios are the measurement.</strong> The same clock
+    times every element, so the ratios do not depend on the camera's true frame rate. The frame
+    counts check the camera: a 55-frame dot means a 230 fps camera, but a dash-to-dot ratio of 2.6
+    would mean a firmware bug.</p>
+  <div class="tw"><table>
+    <tr><th>element</th><th>ratio<br>to dot</th><th>frames<br>at 240 fps</th><th>measured</th></tr>
+    <tr><td>dot<br><span class="dim n">240 ms</span></td><td class="n">1</td><td class="n">~58</td><td class="pending">not yet measured</td></tr>
+    <tr><td>dash<br><span class="dim n">720 ms</span></td><td class="n">3</td><td class="n">~173</td><td class="pending">not yet measured</td></tr>
+    <tr><td>gap inside a letter<br><span class="dim n">240 ms</span></td><td class="n">1</td><td class="n">~58</td><td class="pending">not yet measured</td></tr>
+    <tr><td>gap between letters<br><span class="dim n">720 ms</span></td><td class="n">3</td><td class="n">~173</td><td class="pending">not yet measured</td></tr>
+    <tr><td>gap between words<br><span class="dim n">1680 ms</span></td><td class="n">7</td><td class="n">~403</td><td class="pending">not yet measured</td></tr>
+  </table></div>
+
+  <h3>Test 3 — by eye</h3>
+  <p>At 5 WPM, everything is slow enough to watch: a dash should look three times as long as a
+    dot, and a word gap clearly longer than a letter gap. <span class="pending">Not yet recorded.</span></p>
+
+  <h3>Test 4 — the display keeps up</h3>
+  <p>A 255-character message at 40 WPM, with the phone and the LED filmed in the same frame. The
+    screen will run behind the LED: an element at 40 WPM lasts 30 ms, and WiFi plus the browser
+    take tens of milliseconds. That lag is expected. What would count as a defect is a lag that
+    grows over the message, or events going missing.</p>
+  <div class="tw"><table>
+    <tr><th>criterion</th><th>pass if</th><th>measured</th></tr>
+    <tr><td>lag near the start</td><td>≤ 150 ms<br><span class="dim">36 frames</span></td><td class="pending">not yet measured</td></tr>
+    <tr><td>lag near the end</td><td>≤ 150 ms, and no more than at the start</td><td class="pending">not yet measured</td></tr>
+    <tr><td>events lost</td><td class="n">0</td><td class="pending">not yet measured</td></tr>
+  </table></div>
+
+  <h3>What these tests cannot tell you</h3>
+  <div class="callout">
+    <p><strong>Nothing here measures ±0.2% against an outside reference.</strong></p>
+    <ul>
+      <li>The stopwatch is coarse.</li>
+      <li>The board's reported time uses the board's own clock, so it would not notice if that
+        crystal ran consistently fast or slow.</li>
+      <li>The video measures ratios, not absolute durations.</li>
+    </ul>
+    <p>Together they catch every realistic way this could go wrong: a wrong constant, a missing
+      or doubled gap, drift over a long message. A traceable absolute measurement would need an
+      instrument this project deliberately does without.</p>
+  </div>
+</section>
+
+<section id="build">
+  <h2>Build one yourself</h2>
+  <p>You need an ESP32-S3 N16R8 dev board with its RGB LED on GPIO 48, a USB-C data cable and
+    <a href="https://platformio.org/">PlatformIO</a>. Nothing is wired to the board.</p>
+  <pre>git clone https://github.com/semiconda/esp32-morse.git
+cd esp32-morse/firmware
+pio run -t upload</pre>
+  <p>The app is compiled into the firmware, so there is a single upload. The
+    <a href="https://github.com/semiconda/esp32-morse#readme">README</a> covers the rest:
+    the first flash of a factory-fresh board, the serial commands, and running the tests.</p>
+</section>
+
+<footer>
+  <div class="orn" aria-hidden="true">
+    <!-- SK, end of contact: ...-.- -->
+    <span class="og"><span class="sig"><i></i><i></i><i></i><i class="h"></i><i></i><i class="h"></i></span></span>
+  </div>
+  esp32-morse · by <a href="https://github.com/semiconda">semiconda</a> ·
+  <a href="https://github.com/semiconda/esp32-morse">source</a>
+</footer>
+
+<script>
+// The demo: PARIS on a strip of tape and on a lamp. Only the five letters of PARIS are needed,
+// so this is not a Morse table.
+(function () {
+  'use strict';
+  var CODES = { P: '.--.', A: '.-', R: '.-.', I: '..', S: '...' };
+  var WORD = 'PARIS';
+  var U = 10;            // drawing units per Morse unit
+  var TOP = 30, H = 18;  // the row of marks
+
+  // One entry per segment: {on, start, len} in units; 50 units with the trailing word gap.
+  var segs = [], chars = [], t = 0;
+  for (var c = 0; c < WORD.length; c++) {
+    var code = CODES[WORD[c]], c0 = t;
+    for (var e = 0; e < code.length; e++) {
+      var n = code[e] === '-' ? 3 : 1;
+      segs.push({ on: true, start: t, len: n }); t += n;
+      var gap = e < code.length - 1 ? 1 : (c < WORD.length - 1 ? 3 : 7);
+      segs.push({ on: false, start: t, len: gap }); t += gap;
+    }
+    chars.push({ ch: WORD[c], start: c0, end: t });
+  }
+  var TOTAL = t; // 50
+
+  var NS = 'http://www.w3.org/2000/svg';
+  var svg = document.getElementById('tape');
+  svg.setAttribute('viewBox', '-8 0 ' + (TOTAL * U + 16) + ' 82');
+  function el(name, attrs, text) {
+    var n = document.createElementNS(NS, name);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    svg.appendChild(n);
+    return n;
+  }
+  var marks = [], labels = [];
+  segs.forEach(function (s) {
+    marks.push(el('rect', s.on
+      ? { 'class': 't-on', x: s.start * U + .5, y: TOP, width: s.len * U - 1, height: H, rx: 2 }
+      : { 'class': 't-off', x: s.start * U + .5, y: TOP + H / 2 - .5, width: s.len * U - 1, height: 1 }));
+  });
+  chars.forEach(function (ch) {
+    var code = CODES[ch.ch];
+    var len = 0; for (var i = 0; i < code.length; i++) len += (code[i] === '-' ? 3 : 1) + (i ? 1 : 0);
+    labels.push(el('text', { 'class': 't-ch', x: (ch.start + len / 2) * U, y: 20 }, ch.ch));
+  });
+  for (var u = 0; u <= TOTAL; u += 5) {
+    el('line', { 'class': 't-tick', x1: u * U, x2: u * U, y1: TOP + H + 4, y2: TOP + H + (u % 10 ? 8 : 11) });
+    if (u % 10 === 0) el('text', { 'class': 't-num', x: u * U, y: TOP + H + 26 }, String(u));
+  }
+  el('text', { 'class': 't-gap', x: (TOTAL - 3.5) * U, y: 20 }, 'word gap');
+  var cursor = el('line', { 'class': 't-cursor', x1: 0, x2: 0, y1: TOP - 4, y2: TOP + H + 4, visibility: 'hidden' });
+
+  var wpm = document.getElementById('wpm'), out = document.getElementById('wpmOut');
+  var lamp = document.getElementById('lamp'), play = document.getElementById('play');
+  function dotMs() { return 1200 / +wpm.value; }
+  function showSpeed() {
+    var d = dotMs();
+    out.textContent = wpm.value + ' WPM · dot ' + (Math.round(d * 10) / 10) + ' ms · PARIS ' +
+      (TOTAL * d / 1000).toFixed(2) + ' s';
+  }
+  wpm.addEventListener('input', function () { showSpeed(); if (running) start(); });
+  showSpeed();
+
+  // Like the firmware: position from a fixed start, never "previous frame plus a delay".
+  var running = false, t0 = 0, raf = 0;
+  function frame(now) {
+    var units = ((now - t0) / dotMs()) % TOTAL;
+    var lit = false;
+    segs.forEach(function (s, i) {
+      var inSeg = units >= s.start && units < s.start + s.len;
+      if (s.on) marks[i].classList.toggle('lit', inSeg);
+      if (inSeg && s.on) lit = true;
+    });
+    chars.forEach(function (ch, i) { labels[i].classList.toggle('cur', units >= ch.start && units < ch.end); });
+    lamp.classList.toggle('on', lit);
+    cursor.setAttribute('x1', units * U); cursor.setAttribute('x2', units * U);
+    raf = requestAnimationFrame(frame);
+  }
+  function start() { t0 = performance.now(); }
+  play.addEventListener('click', function () {
+    running = !running;
+    play.textContent = running ? 'Stop' : 'Play';
+    cursor.setAttribute('visibility', running ? 'visible' : 'hidden');
+    if (running) { start(); raf = requestAnimationFrame(frame); }
+    else {
+      cancelAnimationFrame(raf);
+      lamp.classList.remove('on');
+      marks.forEach(function (m) { m.classList.remove('lit'); });
+      labels.forEach(function (l) { l.classList.remove('cur'); });
+    }
+  });
+})();
+</script>
+</body>
+</html>
