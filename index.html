@@ -16,7 +16,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
-<meta name="description" content="An ESP32-S3 that sends your message as Morse code on its LED, timed to the microsecond, and how that timing was checked with a stopwatch and a slow-motion camera.">
+<meta name="description" content="A Morse code translator: type a message on your phone and an ESP32-S3 blinks it in Morse code on its LED.">
 <title>esp32-morse</title>
 <style>
   /* The app's palette: walnut, brass, paper tape. Dark is the default. */
@@ -248,8 +248,8 @@
     <span class="og"><span class="sig"><i></i><i></i><i></i></span><b>S</b></span>
     <span class="og"><span class="sig"><i></i></span><b>E</b></span>
   </div>
-  <p class="lede">Type a message on your phone. An ESP32-S3 sends it as Morse code on its LED,
-    timed to the microsecond, then reports how long it took.</p>
+  <p class="lede">Type a message on your phone. An ESP32-S3 translates it into Morse code and
+    blinks it on its LED, while your phone follows along letter by letter.</p>
   <div class="by">by <a href="https://github.com/semiconda">semiconda</a></div>
   <div class="links">
     <a class="btn primary" href="https://github.com/semiconda/esp32-morse">Code on GitHub</a>
@@ -259,15 +259,16 @@
 
 <section id="what">
   <h2>What it is</h2>
-  <p>A small instrument with one job: to blink Morse code with timing you can predict on paper and
-    then check. The board runs its own WiFi network and serves the app to your phone, so nothing
-    is installed and no internet is involved. The phone chooses the message and the speed; the
-    board does all the timing.</p>
-  <p>Why Morse? Its timing is defined exactly, by one unit, so every transmission comes with a
-    prediction. Ten copies of the word PARIS at 10 words per minute must take <strong>59.16
+  <p>A Morse code translator. You type a message on your phone, and the board turns it into dots
+    and dashes and blinks them on its LED at the speed you choose. The board runs its own WiFi
+    network and serves the app to your phone, so nothing is installed and no internet is
+    involved. The phone chooses the message and the speed, and the board does all the timing.</p>
+  <p>Morse code defines its timing exactly: every dot, dash and gap is a whole number of one
+    unit, and the speed sets the unit. So the translator's output can be predicted on paper.
+    Ten copies of the word PARIS at 10 words per minute must take <strong>59.16
     seconds</strong>, not 60, and the reason for the missing 0.84 s is a rule that is easy to get
-    wrong. The point of the project is to make that prediction and test it with a stopwatch and a
-    phone camera, not an oscilloscope.</p>
+    wrong. Whether the board keeps to that is checked with a stopwatch and a phone camera, not an
+    oscilloscope (see <a href="#verified">What was verified</a>).</p>
   <p class="dim small">The app itself runs only on the board, so there is no live link to it here.
     Below is an in-browser imitation of the LED, timed the same way.</p>
 </section>
@@ -294,7 +295,7 @@
     <li>Power the board from any USB port or charger.</li>
     <li>On your phone, join the WiFi network <strong><code>esp32-morse</code></strong>, password
       <strong><code>instrument</code></strong>. The password is published on purpose and
-      protects nothing; it only stops a passer-by joining by accident. If the phone warns that
+      protects nothing, it only stops a passer-by joining by accident. If the phone warns that
       the network has no internet, stay connected.</li>
     <li>Open <strong><code>http://192.168.4.1</code></strong>, typing the <code>http://</code>.
       There is no friendly name, only this address (see <a href="#why-no-name">why</a>).</li>
@@ -336,7 +337,7 @@
   <p>Speed is defined by the word PARIS, which is exactly 50 units including the word gap after
     it. <em>W</em> words per minute is 50<em>W</em> units in 60 seconds, so</p>
   <div class="eq">dot (ms) = 1200 / WPM</div>
-  <p>At 20 WPM a dot is 60 ms and a dash 180 ms. At 40 WPM a dot is 30 ms; at 5 WPM, 240 ms.</p>
+  <p>At 20 WPM a dot is 60 ms and a dash 180 ms. At 40 WPM a dot is 30 ms, and at 5 WPM it is 240 ms.</p>
 
   <h3>Why ten PARIS take 59.16 s, not 60</h3>
   <p>PARIS is 50 units only if you count the word gap that follows it. A transmission ends with
@@ -374,13 +375,13 @@ ten PARIS = 10 × 50 − 7  = 493 units
 
   <h3>From the phone to the LED</h3>
   <div class="flow" aria-label="The signal path">
-    <div><b>Phone</b> — the app, served by the board, talking over a WebSocket</div>
+    <div><b>Phone</b>, the app, served by the board, talking over a WebSocket</div>
     <div class="arr" aria-hidden="true">↓ message and speed &nbsp;·&nbsp; ↑ progress and the board's time</div>
-    <div><b>Main loop</b> — checks the request again, translates the whole message once, then hands it over</div>
+    <div><b>Main loop</b>, checks the request again, translates the whole message once, then hands it over</div>
     <div class="arr" aria-hidden="true">↓ &nbsp;&nbsp;&nbsp; ↑ a queue of events</div>
-    <div><b>Transmitter task</b> — switches the LED at each deadline and records each element in the queue</div>
+    <div><b>Transmitter task</b>, switches the LED at each deadline and records each element in the queue</div>
     <div class="arr" aria-hidden="true">↓</div>
-    <div><b>LED</b> — the WS2812 on GPIO 48 that comes on the dev board; nothing else is wired</div>
+    <div><b>LED</b>, the WS2812 on GPIO 48 that comes on the dev board, nothing else is wired</div>
   </div>
   <p>The transmitter never touches the network. It writes events into a 64-entry queue, about 3.4 s
     of headroom at 40 WPM, and the main loop sends them on. If a phone falls behind, the phone
@@ -418,9 +419,9 @@ ten PARIS = 10 × 50 − 7  = 493 units
   </ul>
   <p>The whole table of 54 characters was also compared with the international standard
     (ITU-R M.1677-1) and agrees, 54 of 54. Five of the punctuation marks, <code>! &amp; ; _ $</code>,
-    are not in that standard; for those, the codes in common use are followed.</p>
+    are not in that standard. For those, the codes in common use are followed.</p>
 
-  <h3>Test 1 — PARIS, ten times</h3>
+  <h3>Test 1, PARIS, ten times</h3>
   <p>Two instruments, each with a pass band set by what it can resolve:</p>
   <ul>
     <li><strong>The stopwatch: ±0.5%.</strong> Reaction time is about ±0.2 s at the start and again
@@ -439,7 +440,7 @@ ten PARIS = 10 × 50 − 7  = 493 units
   <p class="small dim">At 5 and 10 WPM the dot divides exactly into microseconds. 38 WPM is the
     speed where rounding is largest, so that row tests it.</p>
 
-  <h3>Test 2 — slow motion</h3>
+  <h3>Test 2, slow motion</h3>
   <p><code>PARIS PARIS</code> at 5 WPM, with the filming preset, filmed at 240 frames per second
     and counted frame by frame. <strong>The ratios are the measurement.</strong> The same clock
     times every element, so the ratios do not depend on the camera's true frame rate. The frame
@@ -454,11 +455,11 @@ ten PARIS = 10 × 50 − 7  = 493 units
     <tr><td>gap between words<br><span class="dim n">1680 ms</span></td><td class="n">7</td><td class="n">~403</td><td class="pending">not yet measured</td></tr>
   </table></div>
 
-  <h3>Test 3 — by eye</h3>
+  <h3>Test 3, by eye</h3>
   <p>At 5 WPM, everything is slow enough to watch: a dash should look three times as long as a
     dot, and a word gap clearly longer than a letter gap. <span class="pending">Not yet recorded.</span></p>
 
-  <h3>Test 4 — the display keeps up</h3>
+  <h3>Test 4, the display keeps up</h3>
   <p>A 255-character message at 40 WPM, with the phone and the LED filmed in the same frame. The
     screen will run behind the LED: an element at 40 WPM lasts 30 ms, and WiFi plus the browser
     take tens of milliseconds. That lag is expected. What would count as a defect is a lag that
