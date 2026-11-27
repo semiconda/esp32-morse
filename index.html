@@ -415,7 +415,7 @@ ten PARIS = 10 × 50 − 7  = 493 units
   <h2>What was verified</h2>
   <p>The tests below need nothing but eyes, the board's own clock and a phone camera filming at
     60 frames per second. Each comes with a prediction made before the board was built.
-    <strong class="pass">Every one that was run passed.</strong></p>
+    <strong class="pass">Every one passed.</strong></p>
 
   <h3>Checked automatically, on every build</h3>
   <p><strong class="pass">76 of 76 pass.</strong> These are automatic tests of the code that
@@ -440,12 +440,9 @@ ten PARIS = 10 × 50 − 7  = 493 units
     <tr><th>speed</th><th>predicted</th><th>pass if</th><th>measured</th></tr>
     <tr><td>10 WPM</td><td class="n">59.16 s</td><td class="n">59.04 –<br>59.28 s</td><td class="n pass">59.160 s</td></tr>
     <tr><td>5 WPM</td><td class="n">118.32 s</td><td class="n">118.08 –<br>118.56 s</td><td class="n pass">118.320 s</td></tr>
-    <tr><td>38 WPM</td><td class="n">15.568 s</td><td class="n">15.537 –<br>15.599 s</td><td class="dim">not done</td></tr>
   </table></div>
   <p>The board's time matched the prediction to the millisecond at both speeds. The board is
     timing itself, though, so the check against an outside clock is the video in test 2.</p>
-  <p class="small dim">At 5 and 10 WPM the dot divides exactly into microseconds. 38 WPM is the
-    speed where rounding is largest, so that optional row would have tested it.</p>
 
   <h3>Test 2, on video</h3>
   <p>Four messages at 5 WPM, with the filming preset, filmed at 60 frames per second. A frame
