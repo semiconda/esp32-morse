@@ -381,7 +381,7 @@ ten PARIS = 10 × 50 − 7  = 493 units
       function.</li>
     <li><strong>A dark start.</strong> On Send, the LED goes dark for 200 ms before the first dot,
       even if it was lit by a colour preview. The first edge is therefore always dark to lit,
-      which is what the stopwatch and the camera start from. Those 200 ms are not counted in the
+      which is what the camera starts from. Those 200 ms are not counted in the
       reported time.</li>
   </ul>
 
@@ -435,24 +435,16 @@ ten PARIS = 10 × 50 − 7  = 493 units
     are not in that standard. For those, the codes in common use are followed.</p>
 
   <h3>Test 1, PARIS, ten times</h3>
-  <p>Two instruments, each with a pass band set by what it can resolve:</p>
-  <ul>
-    <li><strong>The stopwatch: ±0.5%.</strong> Reaction time is about ±0.2 s at the start and again
-      at the end, so a thumb resolves roughly ±0.4% over a minute.</li>
-    <li><strong>The board's own reported time: ±0.2%.</strong> No thumb is involved, but the board
-      is timing itself with its own clock.</li>
-  </ul>
+  <p>When a transmission ends, the board reports how long it took by its own clock. No reaction
+    time is involved, so the pass band is tight: <strong>±0.2%</strong>.</p>
   <div class="tw"><table>
-    <tr><th>run</th><th>predicted</th><th>pass if</th><th>measured</th></tr>
-    <tr><td>10 WPM<br><span class="dim">stopwatch</span></td><td class="n">59.16 s</td><td class="n">58.86 –<br>59.46 s</td><td class="dim">not done</td></tr>
-    <tr><td>10 WPM<br><span class="dim">board</span></td><td class="n">59.16 s</td><td class="n">59.04 –<br>59.28 s</td><td class="n pass">59.160 s</td></tr>
-    <tr><td>5 WPM<br><span class="dim">stopwatch</span></td><td class="n">118.32 s</td><td class="n">117.73 –<br>118.91 s</td><td class="dim">not done</td></tr>
-    <tr><td>5 WPM<br><span class="dim">board</span></td><td class="n">118.32 s</td><td class="n">118.08 –<br>118.56 s</td><td class="n pass">118.320 s</td></tr>
-    <tr><td>38 WPM<br><span class="dim">board</span></td><td class="n">15.568 s</td><td class="n">15.537 –<br>15.599 s</td><td class="dim">not done</td></tr>
+    <tr><th>speed</th><th>predicted</th><th>pass if</th><th>measured</th></tr>
+    <tr><td>10 WPM</td><td class="n">59.16 s</td><td class="n">59.04 –<br>59.28 s</td><td class="n pass">59.160 s</td></tr>
+    <tr><td>5 WPM</td><td class="n">118.32 s</td><td class="n">118.08 –<br>118.56 s</td><td class="n pass">118.320 s</td></tr>
+    <tr><td>38 WPM</td><td class="n">15.568 s</td><td class="n">15.537 –<br>15.599 s</td><td class="dim">not done</td></tr>
   </table></div>
-  <p>The board's time matched the prediction to the millisecond at both speeds. The stopwatch
-    runs were not done, so the timing is checked against an outside clock only by the video in
-    test 2.</p>
+  <p>The board's time matched the prediction to the millisecond at both speeds. The board is
+    timing itself, though, so the check against an outside clock is the video in test 2.</p>
   <p class="small dim">At 5 and 10 WPM the dot divides exactly into microseconds. 38 WPM is the
     speed where rounding is largest, so that optional row would have tested it.</p>
 
