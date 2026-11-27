@@ -8,7 +8,7 @@
   Plain HTML, CSS and a little JavaScript, no build step and no external resources. The
   colours are the app's, so the two read as one project.
 
-  The "measured" column of the verification table is filled in as the measurements are taken.
+  The "measured" columns of the verification tables hold the results of the runs on 2026-11-27.
   Pictures and video go in media/.
 -->
 <html lang="en">
@@ -221,6 +221,12 @@
   .flow div b { font-family: var(--serif); }
   .flow .arr { border: none; background: none; padding: 0; text-align: center; color: var(--brass-ui); line-height: 1; }
 
+  /* The board at work, filmed: a GIF in a brass frame. */
+  .film { margin: 0 auto 18px; max-width: 572px; }
+  .film img { display: block; width: 100%; height: auto; box-sizing: border-box; border: 6px solid var(--brass-ui);
+    border-radius: 6px; box-shadow: 0 0 0 1px var(--wood-edge), var(--shadow); background: var(--well); }
+  .film figcaption { text-align: center; color: var(--dim); font-size: .85rem; margin-top: 8px; }
+
   footer { text-align: center; color: var(--dim); font-size: .85rem; margin: 26px 0 30px; }
   footer .orn { margin: 0 0 10px; }
 
@@ -257,6 +263,12 @@
   </div>
 </header>
 
+<figure class="film">
+  <img src="media/esp32-morse.gif" width="560" height="315"
+    alt="A message typed on a phone, and the board's LED blinking it in Morse code while the app follows along">
+  <figcaption>The board at work: the phone sends the message, the LED blinks it.</figcaption>
+</figure>
+
 <section id="what">
   <h2>What it is</h2>
   <p>A Morse code translator. You type a message on your phone, and the board translates it into
@@ -267,7 +279,7 @@
     unit, and the speed sets the unit. So the translator's output can be predicted on paper.
     Ten copies of the word PARIS at 10 words per minute must take <strong>59.16
     seconds</strong>, not 60, and the reason for the missing 0.84 s is a rule that is easy to get
-    wrong. Whether the board keeps to that is checked with a stopwatch and a phone camera
+    wrong. Whether the board keeps to that is checked with the board's own clock and a phone camera
     (see <a href="#verified">What was verified</a>).</p>
   <p class="dim small">The app itself runs only on the board, so there is no live link to it here.
     Below is an in-browser imitation of the LED, timed the same way.</p>
@@ -317,7 +329,7 @@
       word gap. The message stays in the box, so pressing Send again repeats it.</li>
     <li><strong>An LED panel</strong> sets the colour and brightness, and warns when a setting will
       be hard to see or film. The <em>filming preset</em>, green at 20%, is the setting used for
-      the slow-motion test, so that measurement can be repeated with identical conditions.</li>
+      the video test, so that measurement can be repeated with identical conditions.</li>
     <li>Up to four phones can connect at once. They all see the same transmission, and any of
       them can stop it.</li>
   </ul>
@@ -401,8 +413,9 @@ ten PARIS = 10 × 50 − 7  = 493 units
 
 <section id="verified">
   <h2>What was verified</h2>
-  <p>The tests below need nothing but eyes, a phone stopwatch and a phone's slow-motion camera.
-    Each comes with a prediction made before the board was built.</p>
+  <p>The tests below need nothing but eyes, the board's own clock and a phone camera filming at
+    60 frames per second. Each comes with a prediction made before the board was built. They were
+    run on 27 November 2026, and <strong class="pass">every one that was run passed.</strong></p>
 
   <h3>Checked automatically, on every build</h3>
   <p><strong class="pass">76 of 76 pass.</strong> The Morse table, the message rules and the
@@ -431,54 +444,77 @@ ten PARIS = 10 × 50 − 7  = 493 units
   </ul>
   <div class="tw"><table>
     <tr><th>run</th><th>predicted</th><th>pass if</th><th>measured</th></tr>
-    <tr><td>10 WPM<br><span class="dim">stopwatch</span></td><td class="n">59.16 s</td><td class="n">58.86 –<br>59.46 s</td><td class="pending">not yet measured</td></tr>
-    <tr><td>10 WPM<br><span class="dim">board</span></td><td class="n">59.16 s</td><td class="n">59.04 –<br>59.28 s</td><td class="pending">not yet measured</td></tr>
-    <tr><td>5 WPM<br><span class="dim">stopwatch</span></td><td class="n">118.32 s</td><td class="n">117.73 –<br>118.91 s</td><td class="pending">not yet measured</td></tr>
-    <tr><td>5 WPM<br><span class="dim">board</span></td><td class="n">118.32 s</td><td class="n">118.08 –<br>118.56 s</td><td class="pending">not yet measured</td></tr>
-    <tr><td>38 WPM<br><span class="dim">board</span></td><td class="n">15.568 s</td><td class="n">15.537 –<br>15.599 s</td><td class="pending">not yet measured</td></tr>
+    <tr><td>10 WPM<br><span class="dim">stopwatch</span></td><td class="n">59.16 s</td><td class="n">58.86 –<br>59.46 s</td><td class="dim">not done</td></tr>
+    <tr><td>10 WPM<br><span class="dim">board</span></td><td class="n">59.16 s</td><td class="n">59.04 –<br>59.28 s</td><td class="n pass">59.160 s</td></tr>
+    <tr><td>5 WPM<br><span class="dim">stopwatch</span></td><td class="n">118.32 s</td><td class="n">117.73 –<br>118.91 s</td><td class="dim">not done</td></tr>
+    <tr><td>5 WPM<br><span class="dim">board</span></td><td class="n">118.32 s</td><td class="n">118.08 –<br>118.56 s</td><td class="n pass">118.320 s</td></tr>
+    <tr><td>38 WPM<br><span class="dim">board</span></td><td class="n">15.568 s</td><td class="n">15.537 –<br>15.599 s</td><td class="dim">not done</td></tr>
   </table></div>
+  <p>The board's time matched the prediction to the millisecond at both speeds. The stopwatch
+    runs were not done, so the timing is checked against an outside clock only by the video in
+    test 2.</p>
   <p class="small dim">At 5 and 10 WPM the dot divides exactly into microseconds. 38 WPM is the
-    speed where rounding is largest, so that row tests it.</p>
+    speed where rounding is largest, so that optional row would have tested it.</p>
 
-  <h3>Test 2, slow motion</h3>
-  <p><code>PARIS PARIS</code> at 5 WPM, with the filming preset, filmed at 240 frames per second
-    and counted frame by frame. <strong>The ratios are the measurement.</strong> The same clock
-    times every element, so the ratios do not depend on the camera's true frame rate. The frame
-    counts check the camera: a 55-frame dot means a 230 fps camera, but a dash-to-dot ratio of 2.6
-    would mean a firmware bug.</p>
+  <h3>Test 2, on video</h3>
+  <p>Four messages at 5 WPM, with the filming preset, filmed at 60 frames per second. A frame
+    is 17 ms, so a single 240 ms dot is only 14 frames and counting it is coarse. Each message is
+    timed instead as a whole, from the first light to the last dark, using the video's own frame
+    timestamps. One frame either way at each end then matters little. Each message stresses a
+    different element: dots, dashes, word gaps, or the gaps inside a letter.
+    <strong>Pass if within ±3 frames (±50 ms) of the prediction.</strong></p>
   <div class="tw"><table>
-    <tr><th>element</th><th>ratio<br>to dot</th><th>frames<br>at 240 fps</th><th>measured</th></tr>
-    <tr><td>dot<br><span class="dim n">240 ms</span></td><td class="n">1</td><td class="n">~58</td><td class="pending">not yet measured</td></tr>
-    <tr><td>dash<br><span class="dim n">720 ms</span></td><td class="n">3</td><td class="n">~173</td><td class="pending">not yet measured</td></tr>
-    <tr><td>gap inside a letter<br><span class="dim n">240 ms</span></td><td class="n">1</td><td class="n">~58</td><td class="pending">not yet measured</td></tr>
-    <tr><td>gap between letters<br><span class="dim n">720 ms</span></td><td class="n">3</td><td class="n">~173</td><td class="pending">not yet measured</td></tr>
-    <tr><td>gap between words<br><span class="dim n">1680 ms</span></td><td class="n">7</td><td class="n">~403</td><td class="pending">not yet measured</td></tr>
+    <tr><th>message</th><th>units</th><th>predicted</th><th>pass if</th><th>measured</th></tr>
+    <tr><td><code>EEEEEEEEEE</code></td><td class="n">37</td><td class="n">8.880 s</td><td class="n">8.830 –<br>8.930 s</td><td class="n pass">8.892 s<br><span class="dim">+12 ms</span></td></tr>
+    <tr><td><code>TTTTTTTTTT</code></td><td class="n">57</td><td class="n">13.680 s</td><td class="n">13.630 –<br>13.730 s</td><td class="n pass">13.680 s<br><span class="dim">0 ms</span></td></tr>
+    <tr><td><code>E E E E E</code></td><td class="n">33</td><td class="n">7.920 s</td><td class="n">7.870 –<br>7.970 s</td><td class="n pass">7.923 s<br><span class="dim">+3 ms</span></td></tr>
+    <tr><td><code>IIIII</code></td><td class="n">27</td><td class="n">6.480 s</td><td class="n">6.430 –<br>6.530 s</td><td class="n pass">6.488 s<br><span class="dim">+8 ms</span></td></tr>
   </table></div>
+  <p>Every mark was there: 10, 10, 5 and 10 flashes. Taking a dot as 240 ms, which test 1
+    confirms, the four totals give each element's length in dots:</p>
+  <div class="tw"><table>
+    <tr><th>element</th><th>predicted</th><th>measured</th></tr>
+    <tr><td>dash</td><td class="n">3</td><td class="n pass">2.995</td></tr>
+    <tr><td>gap inside a letter</td><td class="n">1</td><td class="n pass">1.00</td></tr>
+    <tr><td>gap between letters</td><td class="n">3</td><td class="n pass">3.005</td></tr>
+    <tr><td>gap between words</td><td class="n">7</td><td class="n pass">7.00</td></tr>
+  </table></div>
+  <p class="small dim">All four are within 0.5%. The dash does not even need the dot's length:
+    the T message minus the E message is ten times a dash minus a dot, and it measures 4.788 s
+    against 4.800 s. Single flashes on the video read about 8 ms long, and the dark between them
+    8 ms short, because a frame that is partly lit counts as lit. That is the camera, not the
+    board, and it is why whole messages are timed.</p>
 
   <h3>Test 3, by eye</h3>
   <p>At 5 WPM, everything is slow enough to watch: a dash should look three times as long as a
-    dot, and a word gap clearly longer than a letter gap. <span class="pending">Not yet recorded.</span></p>
+    dot, and a word gap clearly longer than a letter gap. <strong class="pass">Seen as predicted.</strong></p>
 
   <h3>Test 4, the display keeps up</h3>
-  <p>A 255-character message at 40 WPM, with the phone and the LED filmed in the same frame. The
-    screen will run behind the LED: an element at 40 WPM lasts 30 ms, and WiFi plus the browser
-    take tens of milliseconds. That lag is expected. What would count as a defect is a lag that
-    grows over the message, or events going missing.</p>
+  <p>A 224-character message at 40 WPM, about a minute long, with the phone and the LED filmed in
+    the same frame at 60 frames per second. The screen will run behind the LED: an element at 40
+    WPM lasts 30 ms, and WiFi plus the browser take tens of milliseconds. That lag is expected.
+    What would count as a defect is a lag that grows over the message, or events going missing.</p>
   <div class="tw"><table>
     <tr><th>criterion</th><th>pass if</th><th>measured</th></tr>
-    <tr><td>lag near the start</td><td>≤ 150 ms<br><span class="dim">36 frames</span></td><td class="pending">not yet measured</td></tr>
-    <tr><td>lag near the end</td><td>≤ 150 ms, and no more than at the start</td><td class="pending">not yet measured</td></tr>
-    <tr><td>events lost</td><td class="n">0</td><td class="pending">not yet measured</td></tr>
+    <tr><td>lag near the start</td><td>≤ 150 ms<br><span class="dim">9 frames</span></td><td class="n pass">67 ms<br><span class="dim">4 frames</span></td></tr>
+    <tr><td>lag near the end</td><td>≤ 150 ms, and no more than at the start</td><td class="n pass">67 ms<br><span class="dim">4 frames</span></td></tr>
+    <tr><td>events lost</td><td class="n">0</td><td class="n pass">0</td></tr>
   </table></div>
+  <p class="small dim">The lag was measured by lining up the brightness of the lamp on the screen
+    with the brightness of the LED, in ten stretches across the message, rather than edge by
+    edge. The screen skips some of the 30 ms dots, so single edges cannot always be paired. Nine of
+    the ten stretches give 67 ms. In the tenth the camera moved and no lag could be read. Measured
+    from a laptop, the board and the WiFi take about 2 ms, so most of the 67 ms is the phone's
+    browser and screen.</p>
 
   <h3>What these tests cannot tell you</h3>
   <div class="callout">
     <p><strong>Nothing here measures ±0.2% against an outside reference.</strong></p>
     <ul>
-      <li>The stopwatch is coarse.</li>
       <li>The board's reported time uses the board's own clock, so it would not notice if that
         crystal ran consistently fast or slow.</li>
-      <li>The video measures ratios, not absolute durations.</li>
+      <li>The video uses the phone's clock, but a frame at each end makes it good only to about
+        half a percent over a message of a few seconds.</li>
     </ul>
     <p>Together they catch every realistic way this could go wrong: a wrong constant, a missing
       or doubled gap, drift over a long message. A traceable absolute measurement would need an
