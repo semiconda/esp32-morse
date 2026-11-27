@@ -8,7 +8,7 @@
   Plain HTML, CSS and a little JavaScript, no build step and no external resources. The
   colours are the app's, so the two read as one project.
 
-  The "measured" columns of the verification tables hold the results of the runs on 2026-11-27.
+  The "measured" columns of the verification tables hold the measured results.
   Pictures and video go in media/.
 -->
 <html lang="en">
@@ -414,21 +414,21 @@ ten PARIS = 10 × 50 − 7  = 493 units
 <section id="verified">
   <h2>What was verified</h2>
   <p>The tests below need nothing but eyes, the board's own clock and a phone camera filming at
-    60 frames per second. Each comes with a prediction made before the board was built. They were
-    run on 27 November 2026, and <strong class="pass">every one that was run passed.</strong></p>
+    60 frames per second. Each comes with a prediction made before the board was built.
+    <strong class="pass">Every one that was run passed.</strong></p>
 
   <h3>Checked automatically, on every build</h3>
   <p><strong class="pass">76 of 76 pass.</strong> The Morse table, the message rules and the
     timing arithmetic compile and run on an ordinary computer, with no board attached
     (<code>pio test -e native</code>). They check:</p>
   <ul>
-    <li>PARIS is exactly 50 units and ten PARIS exactly 493;</li>
-    <li>the digits follow their pattern rather than a copied list;</li>
+    <li>PARIS is exactly 50 units and ten PARIS exactly 493</li>
+    <li>the digits follow their pattern rather than a copied list</li>
     <li>the letters most easily mistyped (<code>Q</code>, <code>Y</code>, <code>F</code>,
-      <code>L</code>) against their known codes;</li>
-    <li>that a speed of 0, 4 or 41 WPM, a missing speed or 20.5 WPM is refused;</li>
-    <li>the 255-character limit;</li>
-    <li>that an emoji is reported at the right position.</li>
+      <code>L</code>) against their known codes</li>
+    <li>that a speed of 0, 4 or 41 WPM, a missing speed or 20.5 WPM is refused</li>
+    <li>the 255-character limit</li>
+    <li>that an emoji is reported at the right position</li>
   </ul>
   <p>The whole table of 54 characters was also compared with the international standard
     (ITU-R M.1677-1) and agrees, 54 of 54. Five of the punctuation marks, <code>! &amp; ; _ $</code>,
