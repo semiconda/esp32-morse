@@ -418,9 +418,9 @@ ten PARIS = 10 × 50 − 7  = 493 units
     <strong class="pass">Every one that was run passed.</strong></p>
 
   <h3>Checked automatically, on every build</h3>
-  <p><strong class="pass">76 of 76 pass.</strong> The Morse table, the message rules and the
-    timing arithmetic compile and run on an ordinary computer, with no board attached
-    (<code>pio test -e native</code>). They check:</p>
+  <p><strong class="pass">76 of 76 pass.</strong> The parts of the firmware that translate
+    and check a message do not need the board, so they are also built and tested on a laptop.
+    One command runs the tests (<code>pio test -e native</code>), and they check:</p>
   <ul>
     <li>PARIS is exactly 50 units and ten PARIS exactly 493</li>
     <li>the digits follow their pattern rather than a copied list</li>
